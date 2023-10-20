@@ -90,10 +90,7 @@ class FrameListener(Node):
         # compute transformations
         from_frame_rel = ur5.end_effector_name()
         to_frame_rel = ur5.base_link_name()
-        global curr_x,curr_y,curr_z,r,p,y
-
-        # Look up for the transformation between target_frame and turtle2 frames
-        # and send velocity commands for turtle2 to reach target_frame
+        global curr_x,curr_y,curr_z
         try:
             t = self.tf_buffer.lookup_transform(
                 to_frame_rel,
@@ -102,8 +99,6 @@ class FrameListener(Node):
             curr_x = t.transform.translation.x
             curr_y = t.transform.translation.y
             curr_z = t.transform.translation.z
-            # q = [t.transform.rotation.w , t.transform.rotation.x ,t.transform.rotation.y ,t.transform.rotation.z ]
-            # r , p , y = R.from_quat(q).as_euler('xyz', degrees=False)
         except TransformException as ex:
             self.get_logger().info(
                 f'Could not transform {to_frame_rel} to {from_frame_rel}: {ex}')
@@ -189,6 +184,55 @@ class DeactivateGripper:
         else:
             self.node.get_logger().error('Failed to detach link')
 
+def Servoing(target,marign):
+    node = Node('Servo')
+    node1 = FrameListener()
+    callback_group = ReentrantCallbackGroup()
+    twist_pub = node.create_publisher(TwistStamped, "/servo_node/delta_twist_cmds", 10)
+    
+    future = rclpy.Future()
+    def func():
+        if curr_x == -65536 and curr_y == -65536 and curr_z == -65536 :
+            return
+        curr_pose_x = target[0] - curr_x
+        curr_pose_y = target[1] - curr_y
+        curr_pose_z = target[2] - curr_z 
+        mag = math.sqrt( curr_x ** 2 + curr_y ** 2 + curr_z ** 2 )
+        vt = [ curr_pose_x / mag , curr_pose_y / mag , curr_pose_z / mag ]
+        if( abs(curr_x-target[0])<marign and abs(curr_y-target[1])<marign and abs(curr_z-target[2])<marign):
+            twist_msg = TwistStamped()
+            twist_msg.header.frame_id = ur5.base_link_name()
+            twist_msg.header.stamp = node.get_clock().now().to_msg()
+            twist_msg.twist.linear.x = 0.0
+            twist_msg.twist.linear.y = 0.0
+            twist_msg.twist.linear.z = 0.0
+            twist_msg.twist.angular.x = 0.0
+            twist_msg.twist.angular.y = 0.0
+            twist_msg.twist.angular.z = 0.0 
+            twist_pub.publish(twist_msg)
+            future.set_result(True)
+            return
+        twist_msg = TwistStamped()
+        twist_msg.header.frame_id = ur5.base_link_name()
+        twist_msg.header.stamp = node.get_clock().now().to_msg()
+        twist_msg.twist.linear.x = vt[0]
+        twist_msg.twist.linear.y = vt[1]
+        twist_msg.twist.linear.z = vt[2]
+        twist_msg.twist.angular.x = 0.0
+        twist_msg.twist.angular.y = 0.0
+        twist_msg.twist.angular.z = 0.0
+        twist_pub.publish(twist_msg) 
+    # Create timer for moving the end effector
+    node.create_timer(0.02, func)
+    # Spin the node in background thread(s)
+    executor = rclpy.executors.MultiThreadedExecutor(2)
+    executor.add_node(node1)
+    executor.add_node(node)
+    executor.spin_until_future_complete(future)
+    node.destroy_node()
+    node1.destroy_node()
+    time.sleep(1)
+
 def main():
     rclpy.init()
     node_finder = TfFramesFinder()
@@ -204,12 +248,12 @@ def main():
         print("k/b interrupted")
     global frame_names,target_pose
     print(frame_names)
-    print(target_pose)
 
     marign = 0.01
     # Now making the ur_5 move
-    for i in range(0,len(target_pose)):
+    for i in range(0,len(frame_names)):
         to_frame = frame_names[i]
+        rclpy.spin_once(node_finder)
         target = node_finder.get_pose(to_frame) # Get the current pose of 'obj_<marker_id>'
 
         # Determining whether to turn in left direction or right direction to pick the current object
@@ -224,56 +268,8 @@ def main():
         for joint in jointList:
             moveit_control.move_to_joint_positions(joint)
             time.sleep(2)
-        
-        node = Node('Servo')
-        node1 = FrameListener()
-
-        callback_group = ReentrantCallbackGroup()
-        twist_pub = node.create_publisher(TwistStamped, "/servo_node/delta_twist_cmds", 10)
-
-        future = rclpy.Future()
-        def func():
-            if curr_x == -65536 and curr_y == -65536 and curr_z == -65536 :
-                return
-            curr_pose_x = target[0] - curr_x
-            curr_pose_y = target[1] - curr_y
-            curr_pose_z = target[2] - curr_z 
-            mag = math.sqrt( curr_x ** 2 + curr_y ** 2 + curr_z ** 2 )
-            vt = [ curr_pose_x / mag , curr_pose_y / mag , curr_pose_z / mag ]
-            if( abs(curr_x-target[0])<marign and abs(curr_y-target[1])<marign and abs(curr_z-target[2])<marign):
-                twist_msg = TwistStamped()
-                twist_msg.header.frame_id = ur5.base_link_name()
-                twist_msg.header.stamp = node.get_clock().now().to_msg()
-                twist_msg.twist.linear.x = 0.0
-                twist_msg.twist.linear.y = 0.0
-                twist_msg.twist.linear.z = 0.0
-                twist_msg.twist.angular.x = 0.0
-                twist_msg.twist.angular.y = 0.0
-                twist_msg.twist.angular.z = 0.0 
-                twist_pub.publish(twist_msg)
-                future.set_result(True)
-                return
-            twist_msg = TwistStamped()
-            twist_msg.header.frame_id = ur5.base_link_name()
-            twist_msg.header.stamp = node.get_clock().now().to_msg()
-            twist_msg.twist.linear.x = vt[0]
-            twist_msg.twist.linear.y = vt[1]
-            twist_msg.twist.linear.z = vt[2]
-            twist_msg.twist.angular.x = 0.0
-            twist_msg.twist.angular.y = 0.0
-            twist_msg.twist.angular.z = 0.0
-            twist_pub.publish(twist_msg) 
-        # Create timer for moving in a circular motion
-        node.create_timer(0.02, func)
-        # Spin the node in background thread(s)
-        executor = rclpy.executors.MultiThreadedExecutor(2)
-        executor.add_node(node1)
-        executor.add_node(node)
-        executor.spin_until_future_complete(future)
-        # executor.spin()  
-        node.destroy_node()
-        node1.destroy_node() 
-        time.sleep(1)
+        # Servoing to boxes 
+        Servoing(target,marign)
 
         # Activate the gripper
         activategrip = ActivateGripper()
@@ -281,61 +277,12 @@ def main():
         time.sleep(1)
 
         # Move to Drop location
-        
-        moveit_control.move_to_joint_positions(jointList[-1])
-        moveit_control.move_to_joint_positions(drop)
+        moveit_control.move_to_joint_positions(jointList[-1]) # MOving to the last joint positions to avoid collisions 
+        time.sleep(2)
+        moveit_control.move_to_joint_positions(drop) # Setting joints to reach Drop location
         time.sleep(2)
 
-        target = drop_pose
-        node = Node('Servo')
-        node1 = FrameListener()
-
-        callback_group = ReentrantCallbackGroup()
-        twist_pub = node.create_publisher(TwistStamped, "/servo_node/delta_twist_cmds", 10)
-
-        future = rclpy.Future()
-        def func():
-            if curr_x == -65536 and curr_y == -65536 and curr_z == -65536 :
-                return
-            curr_pose_x = target[0] - curr_x
-            curr_pose_y = target[1] - curr_y
-            curr_pose_z = target[2] - curr_z 
-            mag = math.sqrt( curr_x ** 2 + curr_y ** 2 + curr_z ** 2 )
-            vt = [ curr_pose_x / mag , curr_pose_y / mag , curr_pose_z / mag ]
-            if( abs(curr_x-target[0])<marign and abs(curr_y-target[1])<marign and abs(curr_z-target[2])<marign):
-                twist_msg = TwistStamped()
-                twist_msg.header.frame_id = ur5.base_link_name()
-                twist_msg.header.stamp = node.get_clock().now().to_msg()
-                twist_msg.twist.linear.x = 0.0
-                twist_msg.twist.linear.y = 0.0
-                twist_msg.twist.linear.z = 0.0
-                twist_msg.twist.angular.x = 0.0
-                twist_msg.twist.angular.y = 0.0
-                twist_msg.twist.angular.z = 0.0 
-                twist_pub.publish(twist_msg)
-                future.set_result(True)
-                return
-            twist_msg = TwistStamped()
-            twist_msg.header.frame_id = ur5.base_link_name()
-            twist_msg.header.stamp = node.get_clock().now().to_msg()
-            twist_msg.twist.linear.x = vt[0]
-            twist_msg.twist.linear.y = vt[1]
-            twist_msg.twist.linear.z = vt[2]
-            twist_msg.twist.angular.x = 0.0
-            twist_msg.twist.angular.y = 0.0
-            twist_msg.twist.angular.z = 0.0
-            twist_pub.publish(twist_msg) 
-        # Create timer for moving in a circular motion
-        node.create_timer(0.02, func)
-        # Spin the node in background thread(s)
-        executor = rclpy.executors.MultiThreadedExecutor(2)
-        executor.add_node(node1)
-        executor.add_node(node)
-        executor.spin_until_future_complete(future)
-        # executor.spin()  
-        node.destroy_node()
-        node1.destroy_node() 
-        time.sleep(1)
+        Servoing(drop_pose,marign) # Precisely reaching drop location using Servoing
 
         # Moving the drop location further as there will be a box placed there previously
         drop_pose[0] -= 0.2
@@ -344,9 +291,6 @@ def main():
         deactivategrip = DeactivateGripper()
         deactivategrip.detach_link(to_frame[4:])
         time.sleep(1)
-
-
-
     rclpy.shutdown()
 if __name__ == "__main__":
     main()
