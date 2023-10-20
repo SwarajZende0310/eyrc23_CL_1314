@@ -33,17 +33,20 @@ from rclpy.qos import (
 )
 from linkattacher_msgs.srv import AttachLink,DetachLink
 
+# Joint angles list 
 start = [math.radians(0),math.radians(-137),math.radians(138),math.radians(-180),math.radians(-91),math.radians(180)]
 drop = [-0.03403341798766224, -1.2848632387872256, -1.8567441129914095, -3.185621281551551, -1.545888364367352, 3.1498768354918307]
 right = [math.radians(-90),math.radians(-138),math.radians(137),math.radians(-181),math.radians(-93),math.radians(180)]
 left = [math.radians(90),math.radians(-138),math.radians(137),math.radians(-181),math.radians(-93),math.radians(180)]
+
+# Drop pose
+drop_pose = [-0.37, 0.12, 0.397]
 
 curr_x = -65536
 curr_y = -65536
 curr_z = -65536
 
 frame_names = []
-target_pose = []
 
 class TfFramesFinder(rclpy.node.Node):
     def __init__(self):
@@ -62,12 +65,14 @@ class TfFramesFinder(rclpy.node.Node):
             for frame_name in _frames_dict.keys():
                 if frame_name.startswith('obj_'):
                     frame_names.append(frame_name)
-                    t = self._tf_buffer.lookup_transform(ur5.base_link_name(),frame_name,rclpy.time.Time())
-                    target_pose.append([t.transform.translation.x,t.transform.translation.y,t.transform.translation.z])
                 #self.get_logger().info(frame_name)
 
         else:
             self.get_logger().warn("No frames collected")
+    
+    def get_pose(self,frame_name):
+        t = self._tf_buffer.lookup_transform(ur5.base_link_name(),frame_name,rclpy.time.Time())
+        return [t.transform.translation.x,t.transform.translation.y,t.transform.translation.z]
 
 class FrameListener(Node):
 
@@ -153,7 +158,7 @@ class ActivateGripper:
 
     def attach_link(self, box_name):
         req = AttachLink.Request()
-        req.model1_name =  box_name    
+        req.model1_name =  'box' + box_name    
         req.link1_name  = 'link'       
         req.model2_name =  'ur5'       
         req.link2_name  = 'wrist_3_link'
@@ -173,7 +178,7 @@ class DeactivateGripper:
 
     def detach_link(self, box_name):
         req = DetachLink.Request()
-        req.model1_name =  box_name    
+        req.model1_name =  'box' + box_name    
         req.link1_name  = 'link'       
         req.model2_name =  'ur5'       
         req.link2_name  = 'wrist_3_link'
@@ -186,15 +191,15 @@ class DeactivateGripper:
 
 def main():
     rclpy.init()
-    node = TfFramesFinder()
+    node_finder = TfFramesFinder()
     moveit_control = MoveItJointControl()
 
     try:
         # Spin the node for 2 seconds.
         for _ in range(20):
-            rclpy.spin_once(node)
+            rclpy.spin_once(node_finder)
             time.sleep(0.01)
-        node.get_all_frames()
+        node_finder.get_all_frames()
     except KeyboardInterrupt as e:
         print("k/b interrupted")
     global frame_names,target_pose
@@ -204,9 +209,10 @@ def main():
     marign = 0.01
     # Now making the ur_5 move
     for i in range(0,len(target_pose)):
-        target = target_pose[i]
         to_frame = frame_names[i]
+        target = node_finder.get_pose(to_frame) # Get the current pose of 'obj_<marker_id>'
 
+        # Determining whether to turn in left direction or right direction to pick the current object
         jointList = []
         if target[1] >= 0.37 :
             jointList = [start,left]
@@ -271,15 +277,72 @@ def main():
 
         # Activate the gripper
         activategrip = ActivateGripper()
-        activategrip.attach_link(to_frame)
+        activategrip.attach_link(to_frame[4:])
         time.sleep(1)
 
+        # Move to Drop location
+        
+        moveit_control.move_to_joint_positions(jointList[-1])
         moveit_control.move_to_joint_positions(drop)
         time.sleep(2)
 
+        target = drop_pose
+        node = Node('Servo')
+        node1 = FrameListener()
+
+        callback_group = ReentrantCallbackGroup()
+        twist_pub = node.create_publisher(TwistStamped, "/servo_node/delta_twist_cmds", 10)
+
+        future = rclpy.Future()
+        def func():
+            if curr_x == -65536 and curr_y == -65536 and curr_z == -65536 :
+                return
+            curr_pose_x = target[0] - curr_x
+            curr_pose_y = target[1] - curr_y
+            curr_pose_z = target[2] - curr_z 
+            mag = math.sqrt( curr_x ** 2 + curr_y ** 2 + curr_z ** 2 )
+            vt = [ curr_pose_x / mag , curr_pose_y / mag , curr_pose_z / mag ]
+            if( abs(curr_x-target[0])<marign and abs(curr_y-target[1])<marign and abs(curr_z-target[2])<marign):
+                twist_msg = TwistStamped()
+                twist_msg.header.frame_id = ur5.base_link_name()
+                twist_msg.header.stamp = node.get_clock().now().to_msg()
+                twist_msg.twist.linear.x = 0.0
+                twist_msg.twist.linear.y = 0.0
+                twist_msg.twist.linear.z = 0.0
+                twist_msg.twist.angular.x = 0.0
+                twist_msg.twist.angular.y = 0.0
+                twist_msg.twist.angular.z = 0.0 
+                twist_pub.publish(twist_msg)
+                future.set_result(True)
+                return
+            twist_msg = TwistStamped()
+            twist_msg.header.frame_id = ur5.base_link_name()
+            twist_msg.header.stamp = node.get_clock().now().to_msg()
+            twist_msg.twist.linear.x = vt[0]
+            twist_msg.twist.linear.y = vt[1]
+            twist_msg.twist.linear.z = vt[2]
+            twist_msg.twist.angular.x = 0.0
+            twist_msg.twist.angular.y = 0.0
+            twist_msg.twist.angular.z = 0.0
+            twist_pub.publish(twist_msg) 
+        # Create timer for moving in a circular motion
+        node.create_timer(0.02, func)
+        # Spin the node in background thread(s)
+        executor = rclpy.executors.MultiThreadedExecutor(2)
+        executor.add_node(node1)
+        executor.add_node(node)
+        executor.spin_until_future_complete(future)
+        # executor.spin()  
+        node.destroy_node()
+        node1.destroy_node() 
+        time.sleep(1)
+
+        # Moving the drop location further as there will be a box placed there previously
+        drop_pose[0] -= 0.2
+
         # Deactivate the gripper
         deactivategrip = DeactivateGripper()
-        deactivategrip.detach_link(to_frame)
+        deactivategrip.detach_link(to_frame[4:])
         time.sleep(1)
 
 
@@ -287,4 +350,3 @@ def main():
     rclpy.shutdown()
 if __name__ == "__main__":
     main()
-
