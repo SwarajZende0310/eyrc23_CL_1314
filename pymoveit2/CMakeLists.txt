@@ -20,6 +20,7 @@ install(PROGRAMS
     ${EXAMPLES_DIR}/task1b_new.py
     ${EXAMPLES_DIR}/task1b_complete.py
     ${EXAMPLES_DIR}/servo_test.py
+    ${EXAMPLES_DIR}/task2a.py
     DESTINATION lib/${PROJECT_NAME}
 )
 
