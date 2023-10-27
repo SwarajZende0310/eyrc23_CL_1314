@@ -47,6 +47,12 @@ install(
     share/${PROJECT_NAME}/
 )
 
+install(PROGRAMS
+  scripts/task1c.py
+  scripts/task1c_trial.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 install(
   PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
