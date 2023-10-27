@@ -40,7 +40,11 @@ right = [math.radians(-90),math.radians(-138),math.radians(137),math.radians(-18
 left = [math.radians(90),math.radians(-138),math.radians(137),math.radians(-181),math.radians(-93),math.radians(180)]
 
 # Drop pose
-drop_pose = [-0.37, 0.12, 0.397]
+drop_pose = [-0.57, 0.12, 0.237]
+
+drop_offset=[[0.0 , +0.15 , 0.0 ],
+             [0.0 , -0.15 , 0.0 ],
+             [0.0 ,  0.0  , 0.2 ]]
 
 curr_x = -65536
 curr_y = -65536
@@ -250,6 +254,7 @@ def main():
     print(frame_names)
 
     marign = 0.01
+
     # Now making the ur_5 move
     for i in range(0,len(frame_names)):
         to_frame = frame_names[i]
@@ -282,10 +287,8 @@ def main():
         moveit_control.move_to_joint_positions(drop) # Setting joints to reach Drop location
         time.sleep(2)
 
-        Servoing(drop_pose,marign) # Precisely reaching drop location using Servoing
-
         # Moving the drop location further as there will be a box placed there previously
-        drop_pose[0] -= 0.2
+        Servoing([drop_pose[0]+drop_offset[i][0],drop_pose[1]+drop_offset[i][1],drop_pose[2]+drop_offset[i][2]],marign) # Precisely reaching drop location using Servoing
 
         # Deactivate the gripper
         deactivategrip = DeactivateGripper()
