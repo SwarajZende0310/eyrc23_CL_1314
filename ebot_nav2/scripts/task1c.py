@@ -1,7 +1,7 @@
 #! /usr/bin/env python3
 # Team ID:          [ 1314 ]
 # Author List:		[ Swaraj Zende, Vishal Ghige, Vipul Pardeshi, Vishal Singh ]
-# Filename:		    task1b.py
+# Filename:		    task1c.py
 
 ################### IMPORT MODULES #######################
 from geometry_msgs.msg import PoseStamped
