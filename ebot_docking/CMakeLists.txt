@@ -54,7 +54,7 @@ install(
 )
 
 install(PROGRAMS
-	scripts/ebot_docking.py
+	scripts/ebot_docking_service.py
   scripts/task2b.py
   DESTINATION lib/${PROJECT_NAME}
 )

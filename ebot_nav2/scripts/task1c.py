@@ -63,11 +63,11 @@ def main():
 
         navigator.goToPose(goal_pose) # Use navigator node to achieve the goal_pose
 
-        i = 0
+        j = 0
         while not navigator.isTaskComplete():
-            i = i + 1
+            j = j + 1
             feedback = navigator.getFeedback()
-            if feedback and i % 5 == 0:
+            if feedback and j % 5 == 0:
                 print('Estimated time of arrival: ' + '{0:.0f}'.format(
                       Duration.from_msg(feedback.estimated_time_remaining).nanoseconds / 1e9)
                       + ' seconds.')
