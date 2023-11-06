@@ -13,7 +13,7 @@ import rclpy
 from rclpy.node import Node
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
-from sensor_msgs.msg import Range
+from sensor_msgs.msg import Range,Imu
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from tf_transformations import euler_from_quaternion
@@ -26,6 +26,7 @@ class MyRobotDockingController(Node):
     def __init__(self):
         # Initialize the ROS2 node with a unique name
         super().__init__('my_robot_docking_controller')
+        self.get_logger().info('Started Docking Server')
 
         # Create a callback group for managing callbacks
         self.callback_group = ReentrantCallbackGroup()
@@ -37,6 +38,9 @@ class MyRobotDockingController(Node):
         self.ultrasonic_rl_sub = self.create_subscription(Range, '/ultrasonic_rl/scan', self.ultrasonic_rl_callback, 10)
         # Add another one here
         self.ultrasonic_rr_sub = self.create_subscription(Range,'/ultrasonic_rr/scan', self.ultrasonic_rr_callback, 10)
+
+        # Subscribe to IMU data on /imu topic
+        self.imu_sub = self.create_subscription(Imu, '/imu', self.imu_callback, 10) 
 
         # Create a ROS2 service for controlling docking behavior, can add another custom service message
         self.dock_control_srv = self.create_service(DockSw, 'dock_control', self.dock_control_callback, callback_group=self.callback_group)
@@ -54,7 +58,7 @@ class MyRobotDockingController(Node):
         self.robot_pose = [0.0 , 0.0 , 0.0]
         self.linear_goal = 0.0
         self.angular_goal = 0.0
-        self.angular_Kp = 2
+        self.angular_Kp = 1
         self.linear_Kp = 0.5
 
         # Initialize a timer for the main control loop
@@ -77,6 +81,9 @@ class MyRobotDockingController(Node):
     # Callback function for the right ultrasonic sensor
     def ultrasonic_rr_callback(self, msg):
         self.usrright_value = msg.range
+
+    def imu_callback(self, msg):
+        _,_,self.curr_yaw = euler_from_quaternion([msg.orientation.x ,msg.orientation.y ,msg.orientation.z ,msg.orientation.w])
 
     # Utility function to normalize angles within the range of -π to π (OPTIONAL)
     def normalize_angle(self, angle):
@@ -121,16 +128,21 @@ class MyRobotDockingController(Node):
             if not self.docked_angularly :
                 # Align the bot in proper orientation first
                 # Calculate the current angle using ultrasonic data
-                curr_yaw = math.atan((self.usrleft_value - self.usrright_value) / 0.3)
-                if abs(curr_yaw - self.angular_goal) < angular_tolerance :
+                # curr_yaw = math.atan((self.usrleft_value - self.usrright_value) / 0.3) # Using ultrasonic
+                # 
+                # Using IMU align in angular values 
+                if abs(self.curr_yaw - self.angular_goal) < angular_tolerance :
                     msg.angular.z = 0.0
                     self.docked_angularly = True
+                    if self.docked_linearly:
+                        self.is_docking = False
+                        self.dock_aligned = True
                 else :
-                    msg.angular.z = self.angular_Kp * (curr_yaw - self.angular_goal)
+                    msg.angular.z = self.angular_Kp * (self.angular_goal - self.curr_yaw)
             elif not self.docked_linearly :
                 # Achieve the specified distance
                 # Calculate the distance from the surface
-                curr_dist = (self.usrleft_value + self.usrright_value)/2.0
+                curr_dist = (self.usrleft_value + self.usrright_value)/2.0 # Averaging the distance of both Ultrasonic Sensors
                 if (abs(curr_dist - self.linear_goal) < linear_tolerance) :
                     msg.linear.x = 0.0
                     self.docked_linearly = True
@@ -148,12 +160,14 @@ class MyRobotDockingController(Node):
 
         # Reset flags and start the docking process
         self.is_docking = True
-        self.docked_linearly = False
-        self.docked_angularly = False
+        self.docked_linearly = request.linear_dock
+        self.docked_angularly = request.orientation_dock
         self.dock_aligned = False
 
         # Log a message indicating that docking has started
-        self.get_logger().info("Docking started!")
+        self.get_logger().info(" ----- ")
+        self.get_logger().info(" Docking started! ")
+        self.get_logger().info("For angular goal of "+str(self.angular_goal)+" and for linear goal of "+str(self.linear_goal))
 
         # Create a rate object to control the loop frequency
         rate = self.create_rate(2, self.get_clock())

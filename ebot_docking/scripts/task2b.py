@@ -4,13 +4,16 @@
 # Filename:		    task2b.py
 
 ################### IMPORT MODULES #######################
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped,Twist
 from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
+from nav_msgs.msg import Odometry
 import rclpy
 from rclpy.duration import Duration
 from rclpy.node import Node
+from rclpy.callback_groups import ReentrantCallbackGroup
 from linkattacher_msgs.srv import AttachLink,DetachLink
 from ebot_docking.srv import DockSw 
+from tf_transformations import euler_from_quaternion
 """
 Script to dock the rack and go at the correct pose and place it
 """
@@ -18,14 +21,14 @@ Script to dock the rack and go at the correct pose and place it
 ################### GLOBAL VARIABLES #######################
 # Poses to be achieved
 points = [ [0.0 , 0.0],     # Origin
-           [0.45, 4.7],  # Pre Rack1 pose
-           [0.5 , -2.45], # AP1
-           [0.0 , 0.0]]   # Originv 
+           [0.45, 4.6],  # Pre Rack1 pose
+           [0.8 , -2.455], # AP1
+           [0.0 , 0.0]]   # Origin
 
 # quaternion values respective poses
 orientations = [[ 0.0 , 0.0 , 0.0 , 1.0 ],
                 [ 0.0 , 0.0 , -0.9999997, 0.0007963 ], # 3.14 radian in z axis
-                [ 0.0 , 0.0 , -0.9999997, 0.0007963 ], # 3.14 radian in z axis
+                [ 0.0 , 0.0 ,  0.0, 1.0 ], # 0.0 radian in z axis
                 [ 0.0 , 0.0 , 0.0 , 1.0 ]]
 
 ################### CLASS DEFINITION #######################
@@ -77,9 +80,11 @@ class Docking_Client(Node):
             self.get_logger().info('service not available, waiting again...')
         self.req = DockSw.Request()
 
-    def send_request(self, angle, distance):
+    def send_request(self, angle, distance = 0.0 ,linear = False, angular=False):
         self.req.distance = distance
         self.req.orientation = angle
+        self.req.linear_dock = linear
+        self.req.orientation_dock = angular
         self.future = self.cli.call_async(self.req)
         rclpy.spin_until_future_complete(self, self.future)
         return self.future.result()
@@ -144,7 +149,7 @@ def main():
 
         # Call the Docking service here
         dockClient = Docking_Client()
-        dockClient.send_request(angle = 0.0 , distance = 0.25)
+        dockClient.send_request(angle = 3.14 , distance = 0.01)
 
 
         # Call the Attach Link Service call here
@@ -186,8 +191,7 @@ def main():
         i = i + 1
 
         # Call the Docking service here
-
-
+        dockClient.send_request(angle = 3.14, distance = 0.0 , linear=True ,angular=False )
         
         # Call the Detach Link Service call here
         rack_detach = LinkDetacher()

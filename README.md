@@ -7,7 +7,7 @@ The “Cosmo Logistic” theme of eYRC 2023-24 is set in a warehouse used for in
 
 ## Tasks
 ### __Task 1__
-> [___Task 1A (Object Pose Estimation)___ __::__](/Task%201/Task1A/task1a.py)
+> [___Task 1A (Object Pose Estimation)___ __::__](/ur_description/scripts/)
 
 __Locating Aruco in the world with respect to arm__
 
@@ -29,7 +29,7 @@ $ ros2 run ur_description task1a.py
 
 ---
 
-> [___Task 1B (Arm Manipulation using Moveit)___ __::__](/Task%201/Task1B/task1b.py)
+> [___Task 1B (Arm Manipulation using Moveit)___ __::__](/pymoveit2/examples/)
 
 __Manipulating Robotic Arm using Moveit framework__
 
@@ -50,7 +50,7 @@ $ ros2 run pymoveit2 task1b.py
 ```
 ---
 
-> [___Task 1C (Navigation)___ __::__](/Task%201/Task1C/nav2_cmd_task1c.py)
+> [___Task 1C (Navigation)___ __::__](/ebot_nav2/scripts/)
 
 __Navigation with ROS2 Navigation Stack (Nav2)__
 
@@ -76,7 +76,7 @@ $ ros2 run ebot_nav2 task1c.py
 
 
 ### __Task 2__
-> [___Task 2A (Manipulation with vision)___ __::__](/Task%202/Task2A/task2a.py)
+> [___Task 2A (Manipulation with vision)___ __::__](/pymoveit2/examples/)
 
 __Motion planning of robotic arm with vision__
 
@@ -104,3 +104,33 @@ $ ros2 run pymoveit2 task2a.py
 ```
 
 [Video Link](https://www.youtube.com/watch?v=V2NQAFl0xxk)
+
+---
+
+> [___Task 2B (Dock And Place)___ __::__](/ebot_docking/scripts/)
+
+__eBot Navigation with Docking and Placing the Rack__
+
+Subtasks::
+1. Going to Rack1 pose using Simple Commander API of Nav2 stack
+2. Creating a Docking Server to Align the bot angularly first then in Linear distance
+3. Using a P controller docking the eBot to the Rack
+4. Using Attach_Link service to attach the Rack to the eBot
+5. Going to Arm Pose 1 (AP1) and use the Docking service to achieve certain angle and place the Rack
+6. Using Detach_Link service to detach the Rack from the eBot
+7. Go to Home Position Again
+
+```sh
+$ ros2 launch ebot_description ebot_gazebo_launch.py
+```
+```sh
+$ ros2 launch ebot_nav2 ebot_bringup_launch.py
+```
+```sh
+$ ros2 run ebot_docking ebot_docking_service.py # Starts the Docking service server
+```
+```sh
+$ ros2 run ebot_docking task2b.py
+```
+
+[Video Link](https://youtu.be/pV-qAvbujhw)
