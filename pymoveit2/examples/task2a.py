@@ -38,6 +38,8 @@ start = [math.radians(0),math.radians(-137),math.radians(138),math.radians(-180)
 drop = [-0.03403341798766224, -1.2848632387872256, -1.8567441129914095, -3.185621281551551, -1.545888364367352, 3.1498768354918307]
 right = [math.radians(-90),math.radians(-138),math.radians(137),math.radians(-181),math.radians(-93),math.radians(180)]
 left = [math.radians(90),math.radians(-138),math.radians(137),math.radians(-181),math.radians(-93),math.radians(180)]
+center_right = [math.radians(-45),math.radians(-138),math.radians(137),math.radians(-181),math.radians(-93),math.radians(180)]
+center_left = [math.radians(45),math.radians(-138),math.radians(137),math.radians(-181),math.radians(-93),math.radians(180)]
 
 # Drop pose
 drop_pose = [-0.57, 0.12, 0.237]
@@ -51,6 +53,9 @@ curr_y = -65536
 curr_z = -65536
 
 frame_names = []
+
+# Anonymous count
+anon_cnt = 0
 
 class TfFramesFinder(rclpy.node.Node):
     def __init__(self):
@@ -81,7 +86,9 @@ class TfFramesFinder(rclpy.node.Node):
 class FrameListener(Node):
 
     def __init__(self):
-        super().__init__('tf2_frame_listener')
+        global anon_cnt
+        anon_cnt = anon_cnt + 1
+        super().__init__('tf2_frame_listener'+str(anon_cnt))
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
@@ -189,7 +196,9 @@ class DeactivateGripper:
             self.node.get_logger().error('Failed to detach link')
 
 def Servoing(target,marign):
-    node = Node('Servo')
+    global anon_cnt
+    anon_cnt = anon_cnt + 1
+    node = Node('Servo'+str(anon_cnt))
     node1 = FrameListener()
     callback_group = ReentrantCallbackGroup()
     twist_pub = node.create_publisher(TwistStamped, "/servo_node/delta_twist_cmds", 10)
@@ -241,6 +250,8 @@ def main():
     rclpy.init()
     node_finder = TfFramesFinder()
     moveit_control = MoveItJointControl()
+    activategrip = ActivateGripper()
+    deactivategrip = DeactivateGripper()
 
     try:
         # Spin the node for 2 seconds.
@@ -254,6 +265,10 @@ def main():
     print(frame_names)
 
     marign = 0.01
+    # Distance from boxes
+    dist_for_pick = 0.05 # For Pre Pick Pose
+    dist_for_drop = 0.22 # For Pre Drop Pose
+    preDropOffset = 0.02 # Pre Drop pose offset in Z axis
 
     # Now making the ur_5 move
     for i in range(0,len(frame_names)):
@@ -263,35 +278,55 @@ def main():
 
         # Determining whether to turn in left direction or right direction to pick the current object
         jointList = []
-        if target[1] >= 0.37 :
+        prePickPose = []
+        preDropPose = []
+
+        if target[1] >= 0.37 : # Left
+            prePickPose = [target[0],target[1] - dist_for_pick,target[2]]
+            preDropPose = [target[0],target[1] - dist_for_drop,target[2] + preDropOffset]
             jointList = [start,left]
-        elif target[1] <= -0.28 :
+        elif target[1] <= -0.28 : # Right
+            prePickPose = [target[0],target[1] + dist_for_pick,target[2]]
+            preDropPose = [target[0],target[1] + dist_for_drop,target[2] + preDropOffset]
             jointList = [start,right]
-        else :
+        else : # Center
+            prePickPose = [target[0] - dist_for_pick,target[1],target[2]]
+            preDropPose = [target[0] - dist_for_drop,target[1],target[2] + preDropOffset]
             jointList = [start]
         
         for joint in jointList:
             moveit_control.move_to_joint_positions(joint)
             time.sleep(2)
+
+        # Servoing to prePose of boxes
+        Servoing(prePickPose,marign)
+        print('\n Reached PrePickPose \n')
+
+        # Align the Yaw of the boxes
+        #
+
         # Servoing to boxes 
         Servoing(target,marign)
+        print('\n Reached Target \n')
 
         # Activate the gripper
-        activategrip = ActivateGripper()
         activategrip.attach_link(to_frame[4:])
         time.sleep(1)
 
+        # Servoing back to prePose of boxes
+        Servoing(preDropPose,marign)
+        print('\n Reached PreDropPose \n')
+
         # Move to Drop location
         moveit_control.move_to_joint_positions(jointList[-1]) # MOving to the last joint positions to avoid collisions 
-        time.sleep(2)
+        time.sleep(1)
         moveit_control.move_to_joint_positions(drop) # Setting joints to reach Drop location
-        time.sleep(2)
+        time.sleep(1)
 
         # Moving the drop location further as there will be a box placed there previously
         Servoing([drop_pose[0]+drop_offset[i][0],drop_pose[1]+drop_offset[i][1],drop_pose[2]+drop_offset[i][2]],marign) # Precisely reaching drop location using Servoing
 
         # Deactivate the gripper
-        deactivategrip = DeactivateGripper()
         deactivategrip.detach_link(to_frame[4:])
         time.sleep(1)
     rclpy.shutdown()

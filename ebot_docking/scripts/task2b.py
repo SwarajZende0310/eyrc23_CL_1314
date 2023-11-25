@@ -14,22 +14,23 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from linkattacher_msgs.srv import AttachLink,DetachLink
 from ebot_docking.srv import DockSw 
 from tf_transformations import euler_from_quaternion
+import time
 """
 Script to dock the rack and go at the correct pose and place it
 """
 
 ################### GLOBAL VARIABLES #######################
 # Poses to be achieved
-points = [ [0.0 , 0.0],      # Origin
-           [0.45, 4.6],      # Pre Rack1 pose
-           [0.8 , -2.455],   # AP1
-           [0.0 , -2.455]]   # Getting out of under the rack
+points = [ [0.0 , 0.0],     # Origin
+           [0.45, 4.6],     # Pre Rack1 pose
+           [0.8 , -2.455],  # AP1
+           [0.0 , -2.455]]  # Getting out of under the rack
 
 # quaternion values respective poses
 orientations = [[ 0.0 , 0.0 , 0.0 , 1.0 ],
-                [ 0.0 , 0.0 , -0.9999997, 0.0007963 ], # -3.14 radian in z axis
+                [ 0.0 , 0.0 , -0.9999997, 0.0007963 ], # 3.14 radian in z axis
                 [ 0.0 , 0.0 ,  0.0, 1.0 ], # 0.0 radian in z axis
-                [ 0.0 , 0.0 ,  0.9999997, 0.0007963 ]]  # 3.14 radian in z axis
+                [ 0.0 , 0.0 ,  0.9999997, 0.0007963 ]]
 
 ################### CLASS DEFINITION #######################
 
@@ -196,7 +197,7 @@ def main():
         # Call the Detach Link Service call here
         rack_detach = LinkDetacher()
         rack_detach.detach_link('rack1')
-
+        
         # Go to origin Position
         goal_pose = PoseStamped()
         goal_pose.header.frame_id = 'map'
