@@ -38,8 +38,8 @@ start = [math.radians(0),math.radians(-137),math.radians(138),math.radians(-180)
 drop = [-0.03403341798766224, -1.2848632387872256, -1.8567441129914095, -3.185621281551551, -1.545888364367352, 3.1498768354918307]
 right = [math.radians(-90),math.radians(-138),math.radians(137),math.radians(-181),math.radians(-93),math.radians(180)]
 left = [math.radians(90),math.radians(-138),math.radians(137),math.radians(-181),math.radians(-93),math.radians(180)]
-center_right = [math.radians(-45),math.radians(-138),math.radians(137),math.radians(-181),math.radians(-93),math.radians(180)]
-center_left = [math.radians(45),math.radians(-138),math.radians(137),math.radians(-181),math.radians(-93),math.radians(180)]
+center_right = [math.radians(-35),math.radians(-138),math.radians(137),math.radians(-181),math.radians(-35),math.radians(180)]
+center_left = [math.radians(35),math.radians(-138),math.radians(137),math.radians(-181),math.radians(215),math.radians(180)]
 
 # Drop pose
 drop_pose = [-0.57, 0.12, 0.237]
@@ -267,14 +267,16 @@ def main():
     marign = 0.01
     # Distance from boxes
     dist_for_pick = 0.05 # For Pre Pick Pose
-    dist_for_drop = 0.22 # For Pre Drop Pose
-    preDropOffset = 0.02 # Pre Drop pose offset in Z axis
+    dist_for_drop = 0.12 # For Pre Drop Pose
+    preDropOffset = 0.01 # Pre Drop pose offset in Z axis
 
     # Now making the ur_5 move
     for i in range(0,len(frame_names)):
         to_frame = frame_names[i]
         rclpy.spin_once(node_finder)
         target = node_finder.get_pose(to_frame) # Get the current pose of 'obj_<marker_id>'
+        print()
+        print(target)
 
         # Determining whether to turn in left direction or right direction to pick the current object
         jointList = []
@@ -282,21 +284,33 @@ def main():
         preDropPose = []
 
         if target[1] >= 0.37 : # Left
+            print('Going to Left')
             prePickPose = [target[0],target[1] - dist_for_pick,target[2]]
             preDropPose = [target[0],target[1] - dist_for_drop,target[2] + preDropOffset]
             jointList = [start,left]
         elif target[1] <= -0.28 : # Right
+            print('Going to Right')
             prePickPose = [target[0],target[1] + dist_for_pick,target[2]]
             preDropPose = [target[0],target[1] + dist_for_drop,target[2] + preDropOffset]
             jointList = [start,right]
         else : # Center
             prePickPose = [target[0] - dist_for_pick,target[1],target[2]]
             preDropPose = [target[0] - dist_for_drop,target[1],target[2] + preDropOffset]
+            # if target[1] > 0.1:
+            #     print('Going to center left')
+            #     jointList = [start,center_left]
+            # elif target[1] < -0.1:
+            #     print('Going to center Right')
+            #     jointList = [start,center_right]
+            # else:
+            #     print('Going Center')
+            #     jointList = [start]
+            print('Going Center')
             jointList = [start]
         
         for joint in jointList:
             moveit_control.move_to_joint_positions(joint)
-            time.sleep(2)
+            time.sleep(0.5)
 
         # Servoing to prePose of boxes
         Servoing(prePickPose,marign)
@@ -311,7 +325,7 @@ def main():
 
         # Activate the gripper
         activategrip.attach_link(to_frame[4:])
-        time.sleep(1)
+        time.sleep(0.5)
 
         # Servoing back to prePose of boxes
         Servoing(preDropPose,marign)
@@ -319,16 +333,16 @@ def main():
 
         # Move to Drop location
         moveit_control.move_to_joint_positions(jointList[-1]) # MOving to the last joint positions to avoid collisions 
-        time.sleep(1)
+        time.sleep(0.5)
         moveit_control.move_to_joint_positions(drop) # Setting joints to reach Drop location
-        time.sleep(1)
+        time.sleep(0.5)
 
         # Moving the drop location further as there will be a box placed there previously
         Servoing([drop_pose[0]+drop_offset[i][0],drop_pose[1]+drop_offset[i][1],drop_pose[2]+drop_offset[i][2]],marign) # Precisely reaching drop location using Servoing
 
         # Deactivate the gripper
         deactivategrip.detach_link(to_frame[4:])
-        time.sleep(1)
+        time.sleep(0.5)
     rclpy.shutdown()
 if __name__ == "__main__":
     main()
