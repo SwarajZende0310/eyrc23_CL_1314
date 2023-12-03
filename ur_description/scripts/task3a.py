@@ -130,7 +130,7 @@ def detect_aruco(image):
 
     # Use this variable as a threshold value to detect aruco markers of certain size.
     # Ex: avoid markers/boxes placed far away from arm's reach position  
-    aruco_area_threshold = 1500
+    aruco_area_threshold = 1200
 
     # The camera matrix is defined as per camera info loaded from the plugin used. 
     # You may get this from /camer_info topic when camera is spawned in gazebo.
@@ -179,13 +179,46 @@ def detect_aruco(image):
     ############################################
     #covert input BGR to Grayscale
     grayscale_img=cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
+    # Thresholding 
+    _, thresh = cv2.threshold(image, 127, 255, cv2.THRESH_BINARY)
+
+    # Filtering
+
+    # cv2.imshow("Grayscale Image", grayscale_img)
+    # cv2.waitKey(1)
+    # # Sharpen the Grayscale image
+    # kernel = np.array([[0, -1, 0],
+    #                [-1, 5, -1],
+    #                [0, -1, 0]])
+
+    # grayscale_img = cv2.cvtColor(cv2.filter2D(image, -1, kernel),cv2.COLOR_BGR2GRAY)
+
+    # cv2.imshow("Sharpened Grayscale Image", grayscale_img)
+    # cv2.waitKey(1)
+
+    # Thresholding
+    # _, thresh = cv2.threshold(grayscale_img, 127, 255, cv2.THRESH_BINARY)
+    
+    # cv2.imshow('thresholded image',thresh)
+    # cv2.waitKey(1)
+    
+    # Gaussian Blur
+    # blurred = cv2.GaussianBlur(grayscale_img, (5, 5), 0)
+    # cv2.imshow('blurred_image',blurred)
+    # cv2.waitKey(1)
+
+    # Adaptive Thresholding
+    # adaptive_thresh = cv2.adaptiveThreshold(grayscale_img, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 7, 5)
+    # cv2.imshow('adaptive_threshold',adaptive_thresh)
+    # cv2.waitKey(1)
 
     #Load the aruco dictionary
     aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
     parameters = cv2.aruco.DetectorParameters()  # Marker detection parameters
 
     #Detecting aruco id and retrieving ids and corners
-    corners,ids,rejectedImagePoints = cv2.aruco.detectMarkers(grayscale_img,aruco_dict,parameters=parameters)
+    corners,ids,rejectedImagePoints = cv2.aruco.detectMarkers(thresh,aruco_dict,parameters=parameters)
+    print('Detected ids'+str(ids))
 
     # Handle cases for empty markers detection
     # we can calculate the area of the marker and if area is less than the threshold area we pop the element from the dictionary
@@ -201,6 +234,7 @@ def detect_aruco(image):
     if ids is not None:
         for i in range(len(ids)):
             marker_id=ids[i][0]
+            print('For marker_id '+str(marker_id))
 
             # Estimate the pose of the marker (distance, angle, and width)
             rvec, tvec, _ = cv2.aruco.estimatePoseSingleMarkers(corners[i], size_of_aruco_m, cam_mat, dist_mat)
@@ -495,7 +529,7 @@ class aruco_tf(Node):
 
             # Lookup the transform between the base link and the object frame using the 'lookup_transform()` function.
             to_frame_rel = 'base_link'
-            from_frame_rel = 'cam_'+str(id)
+            from_frame_rel = '1314_cam_'+str(id)
             try:
                 t = self.tf_buffer.lookup_transform( to_frame_rel, from_frame_rel, rclpy.time.Time())       
                 # self.get_logger().info(f'Successfully received data!')
