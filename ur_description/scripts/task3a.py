@@ -130,7 +130,7 @@ def detect_aruco(image):
 
     # Use this variable as a threshold value to detect aruco markers of certain size.
     # Ex: avoid markers/boxes placed far away from arm's reach position  
-    aruco_area_threshold = 1200
+    aruco_area_threshold = 1500
 
     # The camera matrix is defined as per camera info loaded from the plugin used. 
     # You may get this from /camer_info topic when camera is spawned in gazebo.
@@ -179,8 +179,10 @@ def detect_aruco(image):
     ############################################
     #covert input BGR to Grayscale
     grayscale_img=cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
+    # cv2.imshow('grayscale',grayscale_img)
     # Thresholding 
-    _, thresh = cv2.threshold(image, 127, 255, cv2.THRESH_BINARY)
+    # _, thresh = cv2.threshold(image, 127, 255, cv2.THRESH_BINARY)
+    # cv2.imshow('thresh',thresh)
 
     # Filtering
 
@@ -203,7 +205,7 @@ def detect_aruco(image):
     # cv2.waitKey(1)
     
     # Gaussian Blur
-    # blurred = cv2.GaussianBlur(grayscale_img, (5, 5), 0)
+    # blurred = cv2.GaussianBlur(grayscale_img, (5, 5), 1.0)
     # cv2.imshow('blurred_image',blurred)
     # cv2.waitKey(1)
 
@@ -213,11 +215,15 @@ def detect_aruco(image):
     # cv2.waitKey(1)
 
     #Load the aruco dictionary
-    aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+    aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_250)
     parameters = cv2.aruco.DetectorParameters()  # Marker detection parameters
 
+    parameters.adaptiveThreshWinSizeMin = 3
+    parameters.adaptiveThreshWinSizeMax = 23
+    parameters.adaptiveThreshWinSizeStep = 15
+
     #Detecting aruco id and retrieving ids and corners
-    corners,ids,rejectedImagePoints = cv2.aruco.detectMarkers(thresh,aruco_dict,parameters=parameters)
+    corners,ids,rejectedImagePoints = cv2.aruco.detectMarkers(grayscale_img,aruco_dict,parameters=parameters)
     print('Detected ids'+str(ids))
 
     # Handle cases for empty markers detection
@@ -325,8 +331,8 @@ class aruco_tf(Node):
 
         ############ Topic SUBSCRIPTIONS ############
 
-        self.color_cam_sub = self.create_subscription(Image, '/camera/color/image_raw', self.colorimagecb, 10)
-        self.depth_cam_sub = self.create_subscription(Image, '/camera/aligned_depth_to_color/image_raw', self.depthimagecb, 10)
+        self.color_cam_sub = self.create_subscription(Image, '/camera/color/image_raw2', self.colorimagecb, 10)
+        self.depth_cam_sub = self.create_subscription(Image, '/camera/aligned_depth_to_color/image_raw2', self.depthimagecb, 10)
 
         ############ Constructor VARIABLES/OBJECTS ############
 
