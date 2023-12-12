@@ -176,7 +176,7 @@ $ ros2 run ur_description task1a.py
 ```
 ```sh
 $ ros2 service call /servo_node/start_servo std_srvs/srv/Trigger {} # Enables Servoing
-$ ros2 run pymoveit2 task2a.py
+$ ros2 run pymoveit2 task3b.py
 ```
 
 [Video Link](https://youtu.be/Z2tGPUlRXYg)
