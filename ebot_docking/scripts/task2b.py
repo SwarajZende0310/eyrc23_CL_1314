@@ -23,7 +23,7 @@ Script to dock the rack and go at the correct pose and place it
 # Poses to be achieved
 points = [ [0.0 , 0.0],     # Origin
            [0.45, 4.6],     # Pre Rack1 pose
-           [0.8 , -2.455],  # AP1
+           [0.9 , -2.455],  # AP1
            [0.0 , -2.455]]  # Getting out of under the rack
 
 # quaternion values respective poses

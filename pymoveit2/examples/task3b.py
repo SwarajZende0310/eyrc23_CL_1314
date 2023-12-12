@@ -1,11 +1,19 @@
 #!/usr/bin/python3
 
+# Team ID:          [ 1314 ]
+# Author List:		[ Swaraj Zende, Vishal Ghige, Vipul Pardeshi, Vishal Singh ]
+# Filename:		    task3b.py
+
 '''
-Code to get all the frame names of the TF tree 
+Dock into the rack specified in yaml file
+Place the rack at arm pose 1(AP1)
+Get all the frame names of the TF tree 
 and the target poses for the ur_5 arm
 Move the arm using Moveit servo and joint angles
+Place the box on the table
 '''
 
+################### IMPORT MODULES #######################
 import yaml
 from threading import Thread
 import numpy as np
@@ -22,9 +30,17 @@ import tf2_ros
 from tf2_ros import TransformException
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.node import Node
-from geometry_msgs.msg import TwistStamped
+from geometry_msgs.msg import TwistStamped,PoseStamped,Twist
 from pymoveit2 import MoveIt2
 from pymoveit2.robots import ur5
+from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
+from nav_msgs.msg import Odometry
+from rclpy.duration import Duration
+from rclpy.callback_groups import ReentrantCallbackGroup
+from linkattacher_msgs.srv import AttachLink,DetachLink
+from ebot_docking.srv import DockSw 
+from tf_transformations import euler_from_quaternion,quaternion_from_euler
+import time
 from rclpy.qos import (
     QoSDurabilityPolicy,
     QoSHistoryPolicy,
@@ -33,6 +49,8 @@ from rclpy.qos import (
 )
 from linkattacher_msgs.srv import AttachLink,DetachLink
 
+################### GLOBAL VARIABLES #######################
+
 # Joint angles list 
 start = [math.radians(0),math.radians(-137),math.radians(138),math.radians(-180),math.radians(-91),math.radians(180)]
 drop = [-0.03403341798766224, -1.2848632387872256, -1.8567441129914095, -3.185621281551551, -1.545888364367352, 3.1498768354918307]
@@ -40,7 +58,6 @@ right = [math.radians(-90),math.radians(-138),math.radians(137),math.radians(-18
 left = [math.radians(90),math.radians(-138),math.radians(137),math.radians(-181),math.radians(-93),math.radians(180)]
 center_right = [math.radians(-35),math.radians(-138),math.radians(137),math.radians(-181),math.radians(-35),math.radians(180)]
 center_left = [math.radians(35),math.radians(-138),math.radians(137),math.radians(-181),math.radians(215),math.radians(180)]
-center_back = [math.radians(0),math.radians(-164),math.radians(153),math.radians(-165),math.radians(-89),math.radians(181)]
 
 # Drop pose
 drop_pose = [-0.57, 0.12, 0.237]
@@ -58,6 +75,11 @@ frame_names = []
 # Anonymous count
 anon_cnt = 0
 
+# AP1 (Arm Pose 1)
+AP1 = [1.0 , -2.355 , 3.14]
+
+################### CLASS DEFINITION #######################
+
 class TfFramesFinder(rclpy.node.Node):
     def __init__(self):
         super().__init__("tf2_frames_finder")
@@ -70,7 +92,7 @@ class TfFramesFinder(rclpy.node.Node):
     def get_all_frames(self):
         _frames_dict = yaml.safe_load(self._tf_buffer.all_frames_as_yaml())
         if _frames_dict:
-            self.get_logger().info(yaml.dump(_frames_dict))
+            # self.get_logger().info(yaml.dump(_frames_dict))
             global frame_names,target_pose
             for frame_name in _frames_dict.keys():
                 if frame_name.startswith('obj_'):
@@ -83,6 +105,8 @@ class TfFramesFinder(rclpy.node.Node):
     def get_pose(self,frame_name):
         t = self._tf_buffer.lookup_transform(ur5.base_link_name(),frame_name,rclpy.time.Time())
         return [t.transform.translation.x,t.transform.translation.y,t.transform.translation.z]
+
+##############################################################
 
 class FrameListener(Node):
 
@@ -115,6 +139,8 @@ class FrameListener(Node):
             self.get_logger().info(
                 f'Could not transform {to_frame_rel} to {from_frame_rel}: {ex}')
             return
+
+##############################################################
 
 class MoveItJointControl:
     def __init__(self):
@@ -156,6 +182,8 @@ class MoveItJointControl:
         self.node.get_logger().info("Shutting down MoveItJointControl")
         self.executor.shutdown()
 
+##############################################################
+
 class ActivateGripper:
     def __init__(self):
         self.node = rclpy.create_node('gripper_Activate_node')
@@ -175,6 +203,8 @@ class ActivateGripper:
             self.node.get_logger().info('Link attachment succeeded')
         else:
             self.node.get_logger().error('Failed to attach link')
+
+##############################################################
 
 class DeactivateGripper:
     def __init__(self):
@@ -196,6 +226,7 @@ class DeactivateGripper:
         else:
             self.node.get_logger().error('Failed to detach link')
 
+####################  SERVOING FUNCTION  #############################
 def Servoing(target,marign):
     global anon_cnt
     anon_cnt = anon_cnt + 1
@@ -203,17 +234,21 @@ def Servoing(target,marign):
     node1 = FrameListener()
     callback_group = ReentrantCallbackGroup()
     twist_pub = node.create_publisher(TwistStamped, "/servo_node/delta_twist_cmds", 10)
+    flag = False
     
-    future = rclpy.Future()
-    def func():
+    while not flag:
+        rclpy.spin_once(node1)
         if curr_x == -65536 and curr_y == -65536 and curr_z == -65536 :
-            return
+            continue
         curr_pose_x = target[0] - curr_x
         curr_pose_y = target[1] - curr_y
         curr_pose_z = target[2] - curr_z 
         mag = math.sqrt( curr_x ** 2 + curr_y ** 2 + curr_z ** 2 )
         vt = [ curr_pose_x / mag , curr_pose_y / mag , curr_pose_z / mag ]
-        if( abs(curr_x-target[0])<marign and abs(curr_y-target[1])<marign and abs(curr_z-target[2])<marign):
+        # print('target : '+str(target))
+        print('curr_pose : ' +str(curr_pose_x)+' '+str(curr_pose_y)+' '+str(curr_pose_z))
+        # print('current mag : '+str(mag))
+        if( abs(curr_pose_x) <= marign and abs(curr_pose_y) <= marign and abs(curr_pose_z) <= marign):
             twist_msg = TwistStamped()
             twist_msg.header.frame_id = ur5.base_link_name()
             twist_msg.header.stamp = node.get_clock().now().to_msg()
@@ -224,8 +259,8 @@ def Servoing(target,marign):
             twist_msg.twist.angular.y = 0.0
             twist_msg.twist.angular.z = 0.0 
             twist_pub.publish(twist_msg)
-            future.set_result(True)
-            return
+            flag = True
+            break
         twist_msg = TwistStamped()
         twist_msg.header.frame_id = ur5.base_link_name()
         twist_msg.header.stamp = node.get_clock().now().to_msg()
@@ -236,27 +271,239 @@ def Servoing(target,marign):
         twist_msg.twist.angular.y = 0.0
         twist_msg.twist.angular.z = 0.0
         twist_pub.publish(twist_msg) 
-    # Create timer for moving the end effector
-    node.create_timer(0.02, func)
-    # Spin the node in background thread(s)
-    executor = rclpy.executors.MultiThreadedExecutor(2)
-    executor.add_node(node1)
-    executor.add_node(node)
-    executor.spin_until_future_complete(future)
+    
     node.destroy_node()
     node1.destroy_node()
     time.sleep(1)
 
+##############################################################
+class LinkAttacher(Node):
+    def __init__(self):
+        super().__init__('Link_Attacher')
+        self.link_attach_cli = self.create_client(AttachLink, '/ATTACH_LINK')
+
+        while not self.link_attach_cli.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Link attacher service not available, waiting again...')
+
+    def attach_link(self, model2_name):
+        req = AttachLink.Request()
+        req.model1_name =  'ebot'     
+        req.link1_name  = 'ebot_base_link'       
+        req.model2_name =  model2_name    
+        req.link2_name  = 'link' 
+
+        self.link_attach_cli.call_async(req)
+
+##############################################################
+
+class LinkDetacher(Node):
+    def __init__(self):
+        super().__init__('Link_Detacher')
+        self.link_detach_cli = self.create_client(DetachLink, '/DETACH_LINK')
+
+        while not self.link_detach_cli.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Link detacher service not available, waiting again...')
+
+    def detach_link(self, model2_name):
+        req = DetachLink.Request()
+        req.model1_name =  'ebot'     
+        req.link1_name  = 'ebot_base_link'       
+        req.model2_name =  model2_name    
+        req.link2_name  = 'link' 
+
+        self.link_detach_cli.call_async(req)
+
+############################################################
+
+class Docking_Client(Node):
+
+    def __init__(self):
+        super().__init__('Docking_Client')
+        self.cli = self.create_client(DockSw, '/dock_control')
+        while not self.cli.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('service not available, waiting again...')
+        self.req = DockSw.Request()
+
+    def send_request(self, angle, distance = 0.0 ,linear = False, angular=False):
+        self.req.distance = distance
+        self.req.orientation = angle
+        self.req.linear_dock = linear
+        self.req.orientation_dock = angular
+        self.future = self.cli.call_async(self.req)
+        rclpy.spin_until_future_complete(self, self.future)
+        return self.future.result()
+
+################### MAIN FUNCTION #######################
 def main():
     rclpy.init()
+    navigator = BasicNavigator()
+
+    # Set initial pose
+    initial_pose = PoseStamped()
+    initial_pose.header.frame_id = 'map'
+    initial_pose.header.stamp = navigator.get_clock().now().to_msg()
+    initial_pose.pose.position.x = 0.0
+    initial_pose.pose.position.y = 0.0
+    initial_pose.pose.orientation.x = 0.0
+    initial_pose.pose.orientation.y = 0.0
+    initial_pose.pose.orientation.z = 0.0
+    initial_pose.pose.orientation.w = 1.0
+    navigator.setInitialPose(initial_pose)
+
+    # Wait for navigation to fully activate, since autostarting nav2
+    navigator.waitUntilNav2Active()
+    navigator.changeMap('/home/saz/colcon_ws/src/ebot_nav2/maps/map.yaml') # Specifying the map to load
+
+    # READING from config.yaml and determing which rack to pick and its pick position
+    file_path = '/home/saz/colcon_ws/src/pymoveit2/examples/config.yaml'
+    with open(file_path, "r") as file:
+        data = yaml.safe_load(file)
+
+    # Accessing the data
+    position_data = data.get("position", [])
+    rack_id = data.get("package_id", [])
+    rack_id = int(rack_id[0])
+
+    rack_pose = []
+    for item in position_data:
+        for rack, coordinates in item.items():
+            if int(rack[4:]) == rack_id:
+                rack_pose = coordinates
+    
+    # Going to specified rack from config.yaml file 
+    goal_pose = PoseStamped()
+    goal_pose.header.frame_id = 'map'
+    goal_pose.header.stamp = navigator.get_clock().now().to_msg()
+    goal_pose.pose.position.x = rack_pose[0] + 0.3
+    goal_pose.pose.position.y = rack_pose[1] + (0.5 if rack_pose[1] < 0 else - 0.5)
+    orientations = quaternion_from_euler(0.0, 0.0, float(rack_pose[2]))
+    goal_pose.pose.orientation.x = orientations[0]
+    goal_pose.pose.orientation.y = orientations[1]
+    goal_pose.pose.orientation.z = orientations[2]
+    goal_pose.pose.orientation.w = orientations[3]
+
+    navigator.goToPose(goal_pose) # Use navigator node to achieve the goal_pose
+
+    j = 0
+    while not navigator.isTaskComplete():
+        j = j + 1
+        feedback = navigator.getFeedback()
+        if feedback and j % 5 == 0:
+            print('Estimated time of arrival: ' + '{0:.0f}'.format(
+                  Duration.from_msg(feedback.estimated_time_remaining).nanoseconds / 1e9)
+                  + ' seconds.')
+
+    result = navigator.getResult()
+    if result == TaskResult.SUCCEEDED:
+        print('Goal succeeded!')
+    elif result == TaskResult.CANCELED:
+        print('Goal was canceled!')
+    elif result == TaskResult.FAILED:
+        print('Goal failed!')
+    else:
+        print('Goal has an invalid return status!')
+
+    # Call the Docking service here
+    dockClient = Docking_Client()
+    dockClient.send_request(angle = float(rack_pose[2]) , distance = 0.01)
+
+    # Call the Attach Link Service call here
+    # Attach the rack to the eBot 
+    rack_attach = LinkAttacher()
+    rack_attach.attach_link('rack'+str(rack_id))
+
+    # Go to AP1
+    goal_pose = PoseStamped()
+    goal_pose.header.frame_id = 'map'
+    goal_pose.header.stamp = navigator.get_clock().now().to_msg()
+    goal_pose.pose.position.x = AP1[0]
+    goal_pose.pose.position.y = AP1[1]
+    orientations = quaternion_from_euler(0.0, 0.0, float(AP1[2]))
+    goal_pose.pose.orientation.x = orientations[0]
+    goal_pose.pose.orientation.y = orientations[1]
+    goal_pose.pose.orientation.z = orientations[2]
+    goal_pose.pose.orientation.w = orientations[3]
+
+    navigator.goToPose(goal_pose) # Use navigator node to achieve the goal_pose
+
+    j = 0
+    while not navigator.isTaskComplete():
+        j = j + 1
+        feedback = navigator.getFeedback()
+        if feedback and j % 5 == 0:
+            print('Estimated time of arrival: ' + '{0:.0f}'.format(
+                  Duration.from_msg(feedback.estimated_time_remaining).nanoseconds / 1e9)
+                  + ' seconds.')
+
+    result = navigator.getResult()
+    if result == TaskResult.SUCCEEDED:
+        print('Goal succeeded!')
+    elif result == TaskResult.CANCELED:
+        print('Goal was canceled!')
+    elif result == TaskResult.FAILED:
+        print('Goal failed!')
+    else:
+        print('Goal has an invalid return status!')
+        
+
+    # Call the Docking service here
+    dockClient.send_request(angle = 3.14, distance = 0.0 , linear=True ,angular=False )
+    
+    # Call the Detach Link Service call here
+    # Detach the rack from eBot
+    rack_detach = LinkDetacher()
+    rack_detach.detach_link('rack'+str(rack_id))
+
+    # Go to origin Position
+    # Get out of the rack 
+    goal_pose = PoseStamped()
+    goal_pose.header.frame_id = 'map'
+    goal_pose.header.stamp = navigator.get_clock().now().to_msg()
+    goal_pose.pose.position.x = 0.0
+    goal_pose.pose.position.y = AP1[1]
+    orientations = quaternion_from_euler(0.0, 0.0, float(AP1[2]))
+    goal_pose.pose.orientation.x = orientations[0]
+    goal_pose.pose.orientation.y = orientations[1]
+    goal_pose.pose.orientation.z = orientations[2]
+    goal_pose.pose.orientation.w = orientations[3]
+
+    navigator.goToPose(goal_pose) # Use navigator node to achieve the goal_pose
+
+    j = 0
+    while not navigator.isTaskComplete():
+        j = j + 1
+        feedback = navigator.getFeedback()
+        if feedback and j % 5 == 0:
+            print('Estimated time of arrival: ' + '{0:.0f}'.format(
+                  Duration.from_msg(feedback.estimated_time_remaining).nanoseconds / 1e9)
+                  + ' seconds.')
+
+    result = navigator.getResult()
+    if result == TaskResult.SUCCEEDED:
+        print('Goal succeeded!')
+    elif result == TaskResult.CANCELED:
+        print('Goal was canceled!')
+    elif result == TaskResult.FAILED:
+        print('Goal failed!')
+    else:
+        print('Goal has an invalid return status!')
+
+    ### Done with ebot work
+    navigator.lifecycleShutdown()
+    dockClient.destroy_node()
+    rack_attach.destroy_node()
+    rack_detach.destroy_node()
+    print('Done with eBot Work')
+    time.sleep(1)
+
     node_finder = TfFramesFinder()
     moveit_control = MoveItJointControl()
     activategrip = ActivateGripper()
     deactivategrip = DeactivateGripper()
-
+    ### Look for the frame name for the boxes
     try:
         # Spin the node for 2 seconds.
-        for _ in range(500):
+        for _ in range(200):
             rclpy.spin_once(node_finder)
             time.sleep(0.01)
         node_finder.get_all_frames()
@@ -265,7 +512,7 @@ def main():
     global frame_names,target_pose
     print(frame_names)
 
-    marign = 0.01
+    marign = 0.03
     # Distance from boxes
     dist_for_pick = 0.05 # For Pre Pick Pose
     dist_for_drop = 0.12 # For Pre Drop Pose
@@ -283,12 +530,11 @@ def main():
         jointList = []
         prePickPose = []
         preDropPose = []
-        postDropPose = None
 
         if target[1] >= 0.37 : # Left
             print('Going to Left')
-            prePickPose = [target[0],target[1] - dist_for_pick, target[2]]
-            preDropPose = [target[0],target[1] - dist_for_drop, target[2] + preDropOffset]
+            prePickPose = [target[0],target[1] - dist_for_pick,target[2]]
+            preDropPose = [target[0],target[1] - dist_for_drop,target[2] + preDropOffset]
             jointList = [start,left]
         elif target[1] <= -0.28 : # Right
             print('Going to Right')
@@ -297,13 +543,13 @@ def main():
             jointList = [start,right]
         else : # Center
             prePickPose = [target[0] - dist_for_pick,target[1],target[2]]
-            preDropPose = [target[0] - dist_for_pick,target[1],target[2] + preDropOffset]
-            if target[1] > 0.1:
-                print('Going to center left')
-                postDropPose = [target[0] - dist_for_drop , 0.1 , target[2] + preDropOffset]
-            elif target[1] < -0.1:
-                print('Going to center Right')
-                postDropPose = [target[0] - dist_for_drop , -0.03 , target[2] + preDropOffset]
+            preDropPose = [target[0] - dist_for_drop,target[1],target[2] + preDropOffset]
+            # if target[1] > 0.1:
+            #     print('Going to center left')
+            #     jointList = [start,center_left]
+            # elif target[1] < -0.1:
+            #     print('Going to center Right')
+            #     jointList = [start,center_right]
             # else:
             #     print('Going Center')
             #     jointList = [start]
@@ -312,11 +558,11 @@ def main():
         
         for joint in jointList:
             moveit_control.move_to_joint_positions(joint)
-            time.sleep(0.5)
+            time.sleep(2)
 
         # Servoing to prePose of boxes
-        Servoing(prePickPose,marign)
-        print('\n Reached PrePickPose \n')
+        #Servoing(prePickPose,marign)
+        #print('\n Reached PrePickPose \n')
 
         # Align the Yaw of the boxes
         #
@@ -324,38 +570,34 @@ def main():
         # Servoing to boxes 
         Servoing(target,marign)
         print('\n Reached Target \n')
+        time.sleep(2)
 
         # Activate the gripper
-        activategrip.attach_link(to_frame[4:])
-        time.sleep(0.5)
+        activategrip.attach_link(str(rack_id))
+        time.sleep(2)
 
         # Servoing back to prePose of boxes
         Servoing(preDropPose,marign)
-        time.sleep(0.5)
         print('\n Reached PreDropPose \n')
 
-        # Coming to center only for center boxes
-        if postDropPose is not None:
-            Servoing(postDropPose,marign)
-            print('\n Reached PostDropPose \n')
-            time.sleep(0.5)
-            # postDropPose[0] = postDropPose[0] - 0.02
-            # Servoing(postDropPose,marign)
-            moveit_control.move_to_joint_positions(center_back)
-            time.sleep(0.5)
-
         # Move to Drop location
-        moveit_control.move_to_joint_positions(jointList[-1]) # MOving to the last joint positions to avoid collisions 
-        time.sleep(0.5)
+        moveit_control.move_to_joint_positions(jointList[-1]) # Muving to the last joint positions to avoid collisions 
+        time.sleep(1)
         moveit_control.move_to_joint_positions(drop) # Setting joints to reach Drop location
-        time.sleep(0.5)
+        time.sleep(1)
 
         # Moving the drop location further as there will be a box placed there previously
         Servoing([drop_pose[0]+drop_offset[i][0],drop_pose[1]+drop_offset[i][1],drop_pose[2]+drop_offset[i][2]],marign) # Precisely reaching drop location using Servoing
+        time.sleep(1)
 
         # Deactivate the gripper
-        deactivategrip.detach_link(to_frame[4:])
-        time.sleep(0.5)
+        deactivategrip.detach_link(str(rack_id))
+        time.sleep(1)
+    
+    
     rclpy.shutdown()
-if __name__ == "__main__":
+    exit(0)
+
+
+if __name__ == '__main__':
     main()
