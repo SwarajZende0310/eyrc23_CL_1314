@@ -134,3 +134,49 @@ $ ros2 run ebot_docking task2b.py
 ```
 
 [Video Link](https://youtu.be/pV-qAvbujhw)
+
+### __Task 3__
+> [___Task 3A (Remote Hardware Task - Object Pose Estimation)___ __::__](/ur_description/scripts/)
+
+__3A Aruco and TF on Hardware__
+
+Subtasks::
+1. Implementation of Task 1A on hardware
+2. Parameters tuning of Aruco Detection Algorithm for real world scenarios  
+3. Using and applying filters on input image for detection of Aruco in different lighting conditions
+
+---
+
+> [___Task 2B (Dock , Pick And Place)___ __::__](/pymoveit2/examples/)
+
+__eBot Navigation with Docking and Placing the Rack and Picking Aruco Boxes__
+
+Subtasks::
+1. Going to specified rack pose in config.taml file 
+2. Using Simple Commander API of Nav2 stack to navigate to specified rack
+3. Using a P controller docking the eBot to the Rack
+4. Navigating to Arm Pose 1 (AP1) and use the Docking service to achieve certain angle and place the Rack 
+5. Looking for boxes in proximity of the arm
+6. Picking the Aruco boxes from the Rack and placing it on the table
+
+```sh
+$ ros2 launch eyantra_warehouse task3a.launch.py
+```
+```sh
+$ ros2 launch ebot_nav2 ebot_bringup_launch.py
+```
+```sh
+$ ros2 launch ur5_moveit spawn_ur5_launch_moveit.launch.py
+```
+```sh
+$ ros2 run ebot_docking ebot_docking_service.py # Starts the Docking service server
+```
+```sh
+$ ros2 run ur_description task1a.py
+```
+```sh
+$ ros2 service call /servo_node/start_servo std_srvs/srv/Trigger {} # Enables Servoing
+$ ros2 run pymoveit2 task2a.py
+```
+
+[Video Link](https://youtu.be/Z2tGPUlRXYg)
