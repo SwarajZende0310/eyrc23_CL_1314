@@ -31,12 +31,15 @@ from rclpy.qos import (
     QoSProfile,
     QoSReliabilityPolicy,
 )
-from linkattacher_msgs.srv import AttachLink,DetachLink
+from ur_msgs.srv import SetIO
+from controller_manager_msgs.srv import SwitchController # module call
 from tf_transformations import euler_from_quaternion
 
 # Joint angles list 
-start = [math.radians(0),math.radians(-137),math.radians(138),math.radians(-180),math.radians(-91),math.radians(180)]
-drop = [-0.03403341798766224, -1.2848632387872256, -1.8567441129914095, -3.185621281551551, -1.545888364367352, 3.1498768354918307]
+# start = [math.radians(0),math.radians(-137),math.radians(138),math.radians(-180),math.radians(-91),math.radians(180)]
+# drop = [-0.03403341798766224, -1.2848632387872256, -1.8567441129914095, -3.185621281551551, -1.545888364367352, 3.1498768354918307]
+start = [0.0, -2.398, 2.43, -3.15, -1.58, 3.15]
+drop = [-0.027, -1.803, -1.3658, -3.039, -1.52, 3.15]
 right = [math.radians(-90),math.radians(-138),math.radians(137),math.radians(-181),math.radians(-93),math.radians(180)]
 left = [math.radians(90),math.radians(-138),math.radians(137),math.radians(-181),math.radians(-93),math.radians(180)]
 center_right = [math.radians(-35),math.radians(-138),math.radians(137),math.radians(-181),math.radians(-35),math.radians(180)]
@@ -115,7 +118,7 @@ class FrameListener(Node):
             curr_z = t.transform.translation.z
             _,_,curr_rot = euler_from_quaternion([t.transform.rotation.x,t.transform.rotation.y,t.transform.rotation.z,t.transform.rotation.w])
             # print()
-            # print(math.degrees(curr_rot))
+            # print(curr_rot)
             # print()
         except TransformException as ex:
             self.get_logger().info(
@@ -162,45 +165,53 @@ class MoveItJointControl:
         self.node.get_logger().info("Shutting down MoveItJointControl")
         self.executor.shutdown()
 
-class ActivateGripper:
+class GripperController(Node):
     def __init__(self):
-        self.node = rclpy.create_node('gripper_Activate_node')
-        self.gripper_control = self.node.create_client(AttachLink, '/GripperMagnetON')
+        super().__init__('Gripper_Controller')
+        self.gripper_control = self.create_client(SetIO, '/io_and_status_controller/set_io')
         while not self.gripper_control.wait_for_service(timeout_sec=1.0):
-            self.node.get_logger().info('EEF service not available, waiting again...')
+            self.get_logger().info('EEF Tool service not available, waiting again...')
 
-    def attach_link(self, box_name):
-        req = AttachLink.Request()
-        req.model1_name =  'box' + box_name    
-        req.link1_name  = 'link'       
-        req.model2_name =  'ur5'       
-        req.link2_name  = 'wrist_3_link'
-        future = self.gripper_control.call_async(req)
-        rclpy.spin_until_future_complete(self.node, future)
-        if future.result() is not None:
-            self.node.get_logger().info('Link attachment succeeded')
-        else:
-            self.node.get_logger().error('Failed to attach link')
+    def gripper_call(self, state):
+        req         = SetIO.Request()
+        req.fun     = 1
+        req.pin     = 16
+        req.state   = float(state)
+        self.gripper_control.call_async(req)
+        return state
 
-class DeactivateGripper:
+class ContextSwitcher(Node):
     def __init__(self):
-        self.node = rclpy.create_node('gripper_deactivate_node')
-        self.gripper_control = self.node.create_client(DetachLink, '/GripperMagnetOFF')
-        while not self.gripper_control.wait_for_service(timeout_sec=1.0):
-            self.node.get_logger().info('EEF service not available, waiting again...')
+        super().__init__('Context_Switcher')
+        self.__contolMSwitch = self.create_client(SwitchController, "/controller_manager/switch_controller")
 
-    def detach_link(self, box_name):
-        req = DetachLink.Request()
-        req.model1_name =  'box' + box_name    
-        req.link1_name  = 'link'       
-        req.model2_name =  'ur5'       
-        req.link2_name  = 'wrist_3_link'
-        future = self.gripper_control.call_async(req)
-        rclpy.spin_until_future_complete(self.node, future)
-        if future.result() is not None:
-            self.node.get_logger().info('Link Detachment succeeded')
-        else:
-            self.node.get_logger().error('Failed to detach link')
+    def activateMoveit(self):
+        # Parameters to switch controller
+        switchParam = SwitchController.Request()
+        switchParam.activate_controllers = ["scaled_joint_trajectory_controller"] # for normal use of moveit
+        switchParam.deactivate_controllers = ["forward_position_controller"] # for servoing
+        switchParam.strictness = 2
+        switchParam.start_asap = False
+
+        # calling control manager service after checking its availability
+        while not self.__contolMSwitch.wait_for_service(timeout_sec=5.0):
+            self.get_logger().warn(f"Service control Manager is not yet available...")
+        self.__contolMSwitch.call_async(switchParam)
+        print("[CM]: Switching Complete")
+    
+    def activateServoing(self):
+        # Parameters to switch controller
+        switchParam = SwitchController.Request()
+        switchParam.deactivate_controllers = ["scaled_joint_trajectory_controller"] # for normal use of moveit
+        switchParam.activate_controllers = ["forward_position_controller"] # for servoing
+        switchParam.strictness = 2
+        switchParam.start_asap = False
+
+        # calling control manager service after checking its availability
+        while not self.__contolMSwitch.wait_for_service(timeout_sec=5.0):
+            self.get_logger().warn(f"Service control Manager is not yet available...")
+        self.__contolMSwitch.call_async(switchParam)
+        print("[CM]: Switching Complete")
 
 def Servoing(target,marign):
     global anon_cnt
@@ -243,7 +254,7 @@ def Servoing(target,marign):
         twist_msg.twist.angular.z = 0.0
         twist_pub.publish(twist_msg) 
     # Create timer for moving the end effector
-    node.create_timer(0.02, func)
+    node.create_timer(0.002, func)
     # Spin the node in background thread(s)
     executor = rclpy.executors.MultiThreadedExecutor(2)
     executor.add_node(node1)
@@ -257,8 +268,8 @@ def main():
     rclpy.init()
     node_finder = TfFramesFinder()
     moveit_control = MoveItJointControl()
-    activategrip = ActivateGripper()
-    deactivategrip = DeactivateGripper()
+    gripper_controller = GripperController()
+    context_switcher = ContextSwitcher()
 
     try:
         # Spin the node for 2 seconds.
@@ -274,7 +285,7 @@ def main():
     marign = 0.01
     # Distance from boxes
     dist_for_pick = 0.05 # For Pre Pick Pose
-    dist_for_drop = 0.12 # For Pre Drop Pose
+    dist_for_drop = 0.14 # For Pre Drop Pose
     preDropOffset = 0.01 # Pre Drop pose offset in Z axis
 
     # Now making the ur_5 move
@@ -316,11 +327,13 @@ def main():
             print('Going Center')
             jointList = [start]
         
+        context_switcher.activateMoveit()
         for joint in jointList:
             moveit_control.move_to_joint_positions(joint)
             time.sleep(0.5)
 
         # Servoing to prePose of boxes
+        context_switcher.activateServoing()
         Servoing(prePickPose,marign)
         print('\n Reached PrePickPose \n')
 
@@ -332,7 +345,7 @@ def main():
         print('\n Reached Target \n')
 
         # Activate the gripper
-        activategrip.attach_link(to_frame[4:])
+        gripper_controller.gripper_call(True)
         time.sleep(0.5)
 
         # Servoing back to prePose of boxes
@@ -340,27 +353,29 @@ def main():
         time.sleep(0.5)
         print('\n Reached PreDropPose \n')
 
-        # Coming to center only for center boxes
-        if postDropPose is not None:
-            Servoing(postDropPose,marign)
-            print('\n Reached PostDropPose \n')
-            time.sleep(0.5)
-            # postDropPose[0] = postDropPose[0] - 0.02
-            # Servoing(postDropPose,marign)
-            moveit_control.move_to_joint_positions(center_back)
-            time.sleep(0.5)
+        # # Coming to center only for center boxes
+        # if postDropPose is not None:
+        #     Servoing(postDropPose,marign)
+        #     print('\n Reached PostDropPose \n')
+        #     time.sleep(0.5)
+        #     # postDropPose[0] = postDropPose[0] - 0.02
+        #     # Servoing(postDropPose,marign)
+        #     moveit_control.move_to_joint_positions(center_back)
+        #     time.sleep(0.5)
 
         # Move to Drop location
+        context_switcher.activateMoveit()
         moveit_control.move_to_joint_positions(jointList[-1]) # MOving to the last joint positions to avoid collisions 
         time.sleep(0.5)
         moveit_control.move_to_joint_positions(drop) # Setting joints to reach Drop location
         time.sleep(0.5)
 
         # Moving the drop location further as there will be a box placed there previously
+        context_switcher.activateServoing()
         Servoing([drop_pose[0]+drop_offset[i][0],drop_pose[1]+drop_offset[i][1],drop_pose[2]+drop_offset[i][2]],marign) # Precisely reaching drop location using Servoing
 
         # Deactivate the gripper
-        deactivategrip.detach_link(to_frame[4:])
+        gripper_controller.gripper_call(False)
         time.sleep(0.5)
     rclpy.shutdown()
 if __name__ == "__main__":

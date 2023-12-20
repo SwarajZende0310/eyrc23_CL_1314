@@ -522,7 +522,7 @@ class aruco_tf(Node):
 
             t.header.stamp = self.get_clock().now().to_msg()
             t.header.frame_id = 'camera_link'
-            t.child_frame_id = '1314_cam_'+str(id)
+            t.child_frame_id = 'cam_'+str(id)
             t.transform.translation.x = x
             t.transform.translation.y = y
             t.transform.translation.z = z
@@ -535,7 +535,7 @@ class aruco_tf(Node):
 
             # Lookup the transform between the base link and the object frame using the 'lookup_transform()` function.
             to_frame_rel = 'base_link'
-            from_frame_rel = '1314_cam_'+str(id)
+            from_frame_rel = 'cam_'+str(id)
             try:
                 t = self.tf_buffer.lookup_transform( to_frame_rel, from_frame_rel, rclpy.time.Time())       
                 # self.get_logger().info(f'Successfully received data!')
@@ -549,7 +549,7 @@ class aruco_tf(Node):
             transform_stamped = TransformStamped()
             transform_stamped.header.stamp = self.get_clock().now().to_msg()
             transform_stamped.header.frame_id = 'base_link'
-            transform_stamped.child_frame_id = '1314_base_' + str(id)
+            transform_stamped.child_frame_id = 'obj_' + str(id)
             transform_stamped.transform = t.transform
             self.br.sendTransform(transform_stamped)
 

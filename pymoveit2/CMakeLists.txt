@@ -23,6 +23,7 @@ install(PROGRAMS
     ${EXAMPLES_DIR}/task2a.py
     ${EXAMPLES_DIR}/task3b.py
     ${EXAMPLES_DIR}/task2a_simple.py
+    ${EXAMPLES_DIR}/task4b.py
     DESTINATION lib/${PROJECT_NAME}
 )
 
