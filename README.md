@@ -147,12 +147,12 @@ Subtasks::
 
 ---
 
-> [___Task 2B (Dock , Pick And Place)___ __::__](/pymoveit2/examples/)
+> [___Task 3B (Dock , Pick And Place)___ __::__](/pymoveit2/examples/)
 
 __eBot Navigation with Docking and Placing the Rack and Picking Aruco Boxes__
 
 Subtasks::
-1. Going to specified rack pose in config.taml file 
+1. Going to specified rack pose in config.yaml file 
 2. Using Simple Commander API of Nav2 stack to navigate to specified rack
 3. Using a P controller docking the eBot to the Rack
 4. Navigating to Arm Pose 1 (AP1) and use the Docking service to achieve certain angle and place the Rack 
