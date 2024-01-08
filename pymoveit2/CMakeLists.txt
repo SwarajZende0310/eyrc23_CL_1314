@@ -24,6 +24,7 @@ install(PROGRAMS
     ${EXAMPLES_DIR}/task3b.py
     ${EXAMPLES_DIR}/task2a_simple.py
     ${EXAMPLES_DIR}/task4b.py
+    ${EXAMPLES_DIR}/task4c.py
     DESTINATION lib/${PROJECT_NAME}
 )
 

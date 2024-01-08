@@ -513,9 +513,9 @@ class aruco_tf(Node):
             transform_stamped.transform = t.transform
             self.br.sendTransform(transform_stamped)
 
-        print()
-        cv2.imshow("Image", self.cv_image)
-        cv2.waitKey(1)
+        # print()
+        # cv2.imshow("Image", self.cv_image)
+        # cv2.waitKey(1)
 
 
 

@@ -34,6 +34,7 @@ from rclpy.qos import (
 from ur_msgs.srv import SetIO
 from controller_manager_msgs.srv import SwitchController # module call
 from tf_transformations import euler_from_quaternion
+from control_msgs.msg import JointTrajectoryControllerState
 
 # Joint angles list 
 # start = [math.radians(0),math.radians(-137),math.radians(138),math.radians(-180),math.radians(-91),math.radians(180)]
@@ -62,6 +63,8 @@ frame_names = []
 
 # Anonymous count
 anon_cnt = 0
+
+positions_array = []
 
 class TfFramesFinder(rclpy.node.Node):
     def __init__(self):
@@ -213,6 +216,21 @@ class ContextSwitcher(Node):
         self.__contolMSwitch.call_async(switchParam)
         print("[CM]: Switching Complete")
 
+class StateSubscriber(Node):
+    def __init__(self):
+        super().__init__('joint_state_subscriber')
+        self.subscription = self.create_subscription(
+            JointTrajectoryControllerState,  # Specify the message type
+            '/joint_trajectory_controller/controller_state',
+            self.state_callback,
+            10)
+
+    def state_callback(self, msg):
+        print('Enterd callback')
+        global positions_array
+        positions_array = list(msg.reference.positions)
+
+
 def Servoing(target,marign):
     global anon_cnt
     anon_cnt = anon_cnt + 1
@@ -270,6 +288,7 @@ def main():
     moveit_control = MoveItJointControl()
     gripper_controller = GripperController()
     context_switcher = ContextSwitcher()
+    joints_sub = StateSubscriber()
 
     try:
         # Spin the node for 2 seconds.
@@ -287,6 +306,7 @@ def main():
     dist_for_pick = 0.05 # For Pre Pick Pose
     dist_for_drop = 0.14 # For Pre Drop Pose
     preDropOffset = 0.01 # Pre Drop pose offset in Z axis
+    postPickOffset = 0.2
 
     # Now making the ur_5 move
     for i in range(0,len(frame_names)):
@@ -306,24 +326,27 @@ def main():
             print('Going to Left')
             prePickPose = [target[0],target[1] - dist_for_pick, target[2]]
             preDropPose = [target[0],target[1] - dist_for_drop, target[2] + preDropOffset]
+            pose = [target[0],target[1] - postPickOffset, target[2] + preDropOffset]
             jointList = [start,left]
         elif target[1] <= -0.28 : # Right
             print('Going to Right')
             prePickPose = [target[0],target[1] + dist_for_pick,target[2]]
             preDropPose = [target[0],target[1] + dist_for_drop,target[2] + preDropOffset]
+            pose = [target[0],target[1] + postPickOffset,target[2] + preDropOffset]
             jointList = [start,right]
         else : # Center
             prePickPose = [target[0] - dist_for_pick,target[1],target[2]]
             preDropPose = [target[0] - dist_for_pick,target[1],target[2] + preDropOffset]
-            if target[1] > 0.1:
-                print('Going to center left')
-                postDropPose = [target[0] - dist_for_drop , 0.1 , target[2] + preDropOffset]
-            elif target[1] < -0.1:
-                print('Going to center Right')
-                postDropPose = [target[0] - dist_for_drop , -0.03 , target[2] + preDropOffset]
+            pose = [target[0] - postPickOffset,target[1],target[2] + preDropOffset]
+            # if target[1] > 0.1:
+            #     print('Going to center left')
+            #     postDropPose = [target[0] - dist_for_drop , 0.1 , target[2] + preDropOffset]
+            # elif target[1] < -0.1:
+            #     print('Going to center Right')
+            #     postDropPose = [target[0] - dist_for_drop , -0.03 , target[2] + preDropOffset]
             # else:
             #     print('Going Center')
-            #     jointList = [start]
+            #     jointList = [start]  
             print('Going Center')
             jointList = [start]
         
@@ -353,15 +376,22 @@ def main():
         time.sleep(0.5)
         print('\n Reached PreDropPose \n')
 
-        # # Coming to center only for center boxes
-        # if postDropPose is not None:
-        #     Servoing(postDropPose,marign)
-        #     print('\n Reached PostDropPose \n')
-        #     time.sleep(0.5)
-        #     # postDropPose[0] = postDropPose[0] - 0.02
-        #     # Servoing(postDropPose,marign)
-        #     moveit_control.move_to_joint_positions(center_back)
-        #     time.sleep(0.5)
+        global positions_array
+        while len(positions_array)==0:
+            print('Waiting for current joint psoitions')
+            rclpy.spin_once(joints_sub)
+
+        print(positions_array)
+        
+        positions_array[-2] = -1.57
+        positions_array[0],positions_array[2] = positions_array[2],positions_array[0]
+        moveit_control.move_to_joint_positions(positions_array)
+        time.sleep(2)
+        positions_array = []
+
+        # Coming back with box attached
+        Servoing(pose,marign)
+        time.sleep(1)
 
         # Move to Drop location
         context_switcher.activateMoveit()

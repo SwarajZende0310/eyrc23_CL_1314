@@ -20,6 +20,7 @@ from tf_transformations import euler_from_quaternion
 from ebot_docking.srv import DockSw  # Import custom service message
 import math, statistics
 from std_msgs.msg import Float32,Float32MultiArray
+from sensor_msgs.msg import Imu
 
 # Define a class for your ROS2 node
 class MyRobotDockingController(Node):
@@ -42,7 +43,7 @@ class MyRobotDockingController(Node):
         # self.ultrasonic_rr_sub = self.create_subscription(Range,'/ultrasonic_rr/scan', self.ultrasonic_rr_callback, 10)
 
         # Subscribe to IMU data on /imu topic
-        self.imu_sub = self.create_subscription(Float32, '/orientation', self.imu_callback, 10) 
+        self.imu_sub = self.create_subscription(Imu, '/sensors/imu1', self.imu_callback, 10) 
 
         # Create a ROS2 service for controlling docking behavior, can add another custom service message
         self.dock_control_srv = self.create_service(DockSw, 'dock_control', self.dock_control_callback, callback_group=self.callback_group)
@@ -76,14 +77,17 @@ class MyRobotDockingController(Node):
         _, _, yaw = euler_from_quaternion(orientation_list)
         self.robot_pose[2] = yaw
 
-    # callback for ultrasonic subscription
+    # callback for ultrasonic subscription(unit in cm || appropriate distance from rack is 15 cm)
     def ultra_callback(self,msg):
         self.usrleft_value = msg.data[4]
         self.usrright_value = msg.data[5]
+        # print(f'left= {self.usrleft_value} right = {self.usrright_value}')
 
     def imu_callback(self, msg):
-        # _,_,self.curr_yaw = euler_from_quaternion([msg.orientation.x ,msg.orientation.y ,msg.orientation.z ,msg.orientation.w])
-        self.curr_yaw = msg
+        _,_,self.curr_yaw = euler_from_quaternion([msg.orientation.x ,msg.orientation.y ,msg.orientation.z ,msg.orientation.w])
+        self.curr_yaw = self.normalize_angle(self.curr_yaw)
+        # print(f'from cl_1314 {self.curr_yaw}')
+        
 
     # Utility function to normalize angles within the range of -π to π (OPTIONAL)
     def normalize_angle(self, angle):
@@ -99,8 +103,8 @@ class MyRobotDockingController(Node):
 
         # The controller loop manages the robot's linear and angular motion 
         # control to achieve docking alignment and execution
-        angular_tolerance = 0.01
-        linear_tolerance = 0.1
+        angular_tolerance = 0.06
+        linear_tolerance = 0.5
         if self.is_docking:
             # ...
             # Implement control logic here for linear and angular motion
@@ -138,6 +142,7 @@ class MyRobotDockingController(Node):
                         self.is_docking = False
                         self.dock_aligned = True
                 else :
+                    print(f'current yaw {self.curr_yaw} and angular goal is {self.angular_goal}')
                     msg.angular.z = self.angular_Kp * (self.angular_goal - self.curr_yaw)
             elif not self.docked_linearly :
                 # Achieve the specified distance
@@ -150,6 +155,7 @@ class MyRobotDockingController(Node):
                     self.dock_aligned = True
                 else :
                     msg.linear.x = self.linear_Kp * (self.linear_goal - curr_dist)
+                    print(f'current dist {curr_dist} and linear goal is {self.linear_goal}')
             self.cmd_vel_pub.publish(msg)
 
     # Callback function for the DockControl service
