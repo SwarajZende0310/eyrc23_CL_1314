@@ -34,7 +34,7 @@ from rclpy.qos import (
 from ur_msgs.srv import SetIO
 from controller_manager_msgs.srv import SwitchController # module call
 from tf_transformations import euler_from_quaternion
-from control_msgs.msg import JointTrajectoryControllerState
+from sensor_msgs.msg import JointState
 
 # Joint angles list 
 # start = [math.radians(0),math.radians(-137),math.radians(138),math.radians(-180),math.radians(-91),math.radians(180)]
@@ -90,7 +90,9 @@ class TfFramesFinder(rclpy.node.Node):
     
     def get_pose(self,frame_name):
         t = self._tf_buffer.lookup_transform(ur5.base_link_name(),frame_name,rclpy.time.Time())
-        return [t.transform.translation.x,t.transform.translation.y,t.transform.translation.z]
+        _,_,yaw = euler_from_quaternion([t.transform.rotation.x,t.transform.rotation.y,t.transform.rotation.z,t.transform.rotation.w])
+        yaw = math.degrees(yaw)
+        return [t.transform.translation.x,t.transform.translation.y,t.transform.translation.z,yaw]
 
 class FrameListener(Node):
 
@@ -220,15 +222,15 @@ class StateSubscriber(Node):
     def __init__(self):
         super().__init__('joint_state_subscriber')
         self.subscription = self.create_subscription(
-            JointTrajectoryControllerState,  # Specify the message type
-            '/joint_trajectory_controller/controller_state',
+            JointState,  # Specify the message type
+            '/joint_states',
             self.state_callback,
             10)
 
     def state_callback(self, msg):
         print('Enterd callback')
         global positions_array
-        positions_array = list(msg.reference.positions)
+        positions_array = list(msg.position)
 
 
 def Servoing(target,marign):
@@ -282,6 +284,52 @@ def Servoing(target,marign):
     node1.destroy_node()
     time.sleep(1)
 
+def yaw_Servoing(target,marign):
+    global anon_cnt
+    anon_cnt = anon_cnt + 1
+    node = Node('Servo'+str(anon_cnt))
+    node1 = FrameListener()
+    callback_group = ReentrantCallbackGroup()
+    twist_pub = node.create_publisher(TwistStamped, "/servo_node/delta_twist_cmds", 10)
+    
+    future = rclpy.Future()
+    def func():
+        if curr_rot == -65536 :
+            return
+        if( abs(target-curr_rot)<marign):
+            twist_msg = TwistStamped()
+            twist_msg.header.frame_id = ur5.base_link_name()
+            twist_msg.header.stamp = node.get_clock().now().to_msg()
+            twist_msg.twist.linear.x = 0.0
+            twist_msg.twist.linear.y = 0.0
+            twist_msg.twist.linear.z = 0.0
+            twist_msg.twist.angular.x = 0.0
+            twist_msg.twist.angular.y = 0.0
+            twist_msg.twist.angular.z = 0.0 
+            twist_pub.publish(twist_msg)
+            future.set_result(True)
+            return
+        twist_msg = TwistStamped()
+        twist_msg.header.frame_id = ur5.base_link_name()
+        twist_msg.header.stamp = node.get_clock().now().to_msg()
+        twist_msg.twist.linear.x = 0.0
+        twist_msg.twist.linear.y = 0.0
+        twist_msg.twist.linear.z = 0.0
+        twist_msg.twist.angular.x = 0.0
+        twist_msg.twist.angular.y = 0.0
+        twist_msg.twist.angular.z = 0.5 if target - curr_rot > 0 else -0.5
+        twist_pub.publish(twist_msg) 
+    # Create timer for moving the end effector
+    node.create_timer(0.02, func)
+    # Spin the node in background thread(s)
+    executor = rclpy.executors.MultiThreadedExecutor(2)
+    executor.add_node(node1)
+    executor.add_node(node)
+    executor.spin_until_future_complete(future)
+    node.destroy_node()
+    node1.destroy_node()
+    time.sleep(1)
+
 def main():
     rclpy.init()
     node_finder = TfFramesFinder()
@@ -306,7 +354,7 @@ def main():
     dist_for_pick = 0.05 # For Pre Pick Pose
     dist_for_drop = 0.14 # For Pre Drop Pose
     preDropOffset = 0.01 # Pre Drop pose offset in Z axis
-    postPickOffset = 0.2
+    postPickOffset = 0.4
 
     # Now making the ur_5 move
     for i in range(0,len(frame_names)):
@@ -337,16 +385,7 @@ def main():
         else : # Center
             prePickPose = [target[0] - dist_for_pick,target[1],target[2]]
             preDropPose = [target[0] - dist_for_pick,target[1],target[2] + preDropOffset]
-            pose = [target[0] - postPickOffset,target[1],target[2] + preDropOffset]
-            # if target[1] > 0.1:
-            #     print('Going to center left')
-            #     postDropPose = [target[0] - dist_for_drop , 0.1 , target[2] + preDropOffset]
-            # elif target[1] < -0.1:
-            #     print('Going to center Right')
-            #     postDropPose = [target[0] - dist_for_drop , -0.03 , target[2] + preDropOffset]
-            # else:
-            #     print('Going Center')
-            #     jointList = [start]  
+            pose = [target[0] - postPickOffset,target[1],target[2] + preDropOffset]  
             print('Going Center')
             jointList = [start]
         
@@ -361,7 +400,8 @@ def main():
         print('\n Reached PrePickPose \n')
 
         # Align the Yaw of the boxes
-        #
+        yaw_Servoing(target[3],4.0)
+        print('\n Yaw Aligned \n')
 
         # Servoing to boxes 
         Servoing(target,marign)
@@ -380,16 +420,19 @@ def main():
         while len(positions_array)==0:
             print('Waiting for current joint psoitions')
             rclpy.spin_once(joints_sub)
-
+        
         print(positions_array)
         
+        last = positions_array.pop()
+        positions_array.insert(0, last)
         positions_array[-2] = -1.57
-        positions_array[0],positions_array[2] = positions_array[2],positions_array[0]
+        context_switcher.activateMoveit()
         moveit_control.move_to_joint_positions(positions_array)
         time.sleep(2)
         positions_array = []
 
         # Coming back with box attached
+        context_switcher.activateServoing()
         Servoing(pose,marign)
         time.sleep(1)
 
@@ -401,8 +444,8 @@ def main():
         time.sleep(0.5)
 
         # Moving the drop location further as there will be a box placed there previously
-        context_switcher.activateServoing()
-        Servoing([drop_pose[0]+drop_offset[i][0],drop_pose[1]+drop_offset[i][1],drop_pose[2]+drop_offset[i][2]],marign) # Precisely reaching drop location using Servoing
+        # context_switcher.activateServoing()
+        # Servoing([drop_pose[0]+drop_offset[i][0],drop_pose[1]+drop_offset[i][1],drop_pose[2]+drop_offset[i][2]],marign) # Precisely reaching drop location using Servoing
 
         # Deactivate the gripper
         gripper_controller.gripper_call(False)

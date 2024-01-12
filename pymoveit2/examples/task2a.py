@@ -87,7 +87,9 @@ class TfFramesFinder(rclpy.node.Node):
     
     def get_pose(self,frame_name):
         t = self._tf_buffer.lookup_transform(ur5.base_link_name(),frame_name,rclpy.time.Time())
-        return [t.transform.translation.x,t.transform.translation.y,t.transform.translation.z]
+        _,_,yaw = euler_from_quaternion([t.transform.rotation.x,t.transform.rotation.y,t.transform.rotation.z,t.transform.rotation.w])
+        yaw = math.degrees(yaw)
+        return [t.transform.translation.x,t.transform.translation.y,t.transform.translation.z,yaw]
 
 class FrameListener(Node):
 
@@ -117,9 +119,10 @@ class FrameListener(Node):
             curr_y = t.transform.translation.y
             curr_z = t.transform.translation.z
             _,_,curr_rot = euler_from_quaternion([t.transform.rotation.x,t.transform.rotation.y,t.transform.rotation.z,t.transform.rotation.w])
-            # print()
-            # print(math.degrees(curr_rot))
-            # print()
+            curr_rot = math.degrees(curr_rot)
+            print()
+            print(math.degrees(curr_rot))
+            print()
         except TransformException as ex:
             self.get_logger().info(
                 f'Could not transform {to_frame_rel} to {from_frame_rel}: {ex}')
@@ -270,6 +273,52 @@ def Servoing(target,marign):
     node1.destroy_node()
     time.sleep(1)
 
+def yaw_Servoing(target,marign):
+    global anon_cnt
+    anon_cnt = anon_cnt + 1
+    node = Node('Servo'+str(anon_cnt))
+    node1 = FrameListener()
+    callback_group = ReentrantCallbackGroup()
+    twist_pub = node.create_publisher(TwistStamped, "/servo_node/delta_twist_cmds", 10)
+    
+    future = rclpy.Future()
+    def func():
+        if curr_rot == -65536 :
+            return
+        if( abs(target-curr_rot)<marign):
+            twist_msg = TwistStamped()
+            twist_msg.header.frame_id = ur5.base_link_name()
+            twist_msg.header.stamp = node.get_clock().now().to_msg()
+            twist_msg.twist.linear.x = 0.0
+            twist_msg.twist.linear.y = 0.0
+            twist_msg.twist.linear.z = 0.0
+            twist_msg.twist.angular.x = 0.0
+            twist_msg.twist.angular.y = 0.0
+            twist_msg.twist.angular.z = 0.0 
+            twist_pub.publish(twist_msg)
+            future.set_result(True)
+            return
+        twist_msg = TwistStamped()
+        twist_msg.header.frame_id = ur5.base_link_name()
+        twist_msg.header.stamp = node.get_clock().now().to_msg()
+        twist_msg.twist.linear.x = 0.0
+        twist_msg.twist.linear.y = 0.0
+        twist_msg.twist.linear.z = 0.0
+        twist_msg.twist.angular.x = 0.0
+        twist_msg.twist.angular.y = 0.0
+        twist_msg.twist.angular.z = 0.5 if target - curr_rot > 0 else -0.5
+        twist_pub.publish(twist_msg) 
+    # Create timer for moving the end effector
+    node.create_timer(0.02, func)
+    # Spin the node in background thread(s)
+    executor = rclpy.executors.MultiThreadedExecutor(2)
+    executor.add_node(node1)
+    executor.add_node(node)
+    executor.spin_until_future_complete(future)
+    node.destroy_node()
+    node1.destroy_node()
+    time.sleep(1)
+
 def main():
     rclpy.init()
     node_finder = TfFramesFinder()
@@ -347,7 +396,8 @@ def main():
         print('\n Reached PrePickPose \n')
 
         # Align the Yaw of the boxes
-        #
+        yaw_Servoing(target[3],4.0)
+        print('\n Yaw Aligned \n')
 
         # Servoing to boxes 
         Servoing(target,marign)
@@ -362,17 +412,17 @@ def main():
         time.sleep(0.5)
         print('\n Reached PreDropPose \n')
 
-        global positions_array
-        while len(positions_array)==0:
-            print('Waiting for current joint psoitions')
-            rclpy.spin_once(joints_sub)
+        # global positions_array
+        # while len(positions_array)==0:
+        #     print('Waiting for current joint psoitions')
+        #     rclpy.spin_once(joints_sub)
 
-        print(positions_array)
+        # print(positions_array)
         
-        positions_array[-2] = -1.57
-        positions_array[0],positions_array[2] = positions_array[2],positions_array[0]
-        moveit_control.move_to_joint_positions(positions_array)
-        time.sleep(2)
+        # positions_array[-2] = -1.57
+        # positions_array[0],positions_array[2] = positions_array[2],positions_array[0]
+        # moveit_control.move_to_joint_positions(positions_array)
+        # time.sleep(2)
         positions_array = []
 
         # pose = [0.0,0.0,target[2]+preDropOffset]
