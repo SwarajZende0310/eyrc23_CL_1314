@@ -2,7 +2,7 @@
 
 # Team ID:          [ 1314 ]
 # Author List:		[ Swaraj Zende, Vishal Ghige, Vipul Pardeshi, Vishal Singh ]
-# Filename:		    task3b.py
+# Filename:		    task4c.py
 
 '''
 Dock into the rack specified in yaml file
@@ -48,6 +48,7 @@ from rclpy.qos import (
     QoSReliabilityPolicy,
 )
 from linkattacher_msgs.srv import AttachLink,DetachLink
+from std_srvs.srv import Trigger
 
 ################### GLOBAL VARIABLES #######################
 
@@ -69,6 +70,7 @@ drop_offset=[[0.0 , +0.15 , 0.0 ],
 curr_x = -65536
 curr_y = -65536
 curr_z = -65536
+curr_rot = -65536
 
 frame_names = []
 
@@ -106,7 +108,9 @@ class TfFramesFinder(rclpy.node.Node):
     
     def get_pose(self,frame_name):
         t = self._tf_buffer.lookup_transform(ur5.base_link_name(),frame_name,rclpy.time.Time())
-        return [t.transform.translation.x,t.transform.translation.y,t.transform.translation.z]
+        _,_,yaw = euler_from_quaternion([t.transform.rotation.x,t.transform.rotation.y,t.transform.rotation.z,t.transform.rotation.w])
+        yaw = math.degrees(yaw)
+        return [t.transform.translation.x,t.transform.translation.y,t.transform.translation.z,yaw]
 
 ##############################################################
 
@@ -128,7 +132,7 @@ class FrameListener(Node):
         # compute transformations
         from_frame_rel = ur5.end_effector_name()
         to_frame_rel = ur5.base_link_name()
-        global curr_x,curr_y,curr_z
+        global curr_x,curr_y,curr_z,curr_rot
         try:
             t = self.tf_buffer.lookup_transform(
                 to_frame_rel,
@@ -137,6 +141,8 @@ class FrameListener(Node):
             curr_x = t.transform.translation.x
             curr_y = t.transform.translation.y
             curr_z = t.transform.translation.z
+            _,_,curr_rot = euler_from_quaternion([t.transform.rotation.x,t.transform.rotation.y,t.transform.rotation.z,t.transform.rotation.w])
+            curr_rot = math.degrees(curr_rot)
         except TransformException as ex:
             self.get_logger().info(
                 f'Could not transform {to_frame_rel} to {from_frame_rel}: {ex}')
@@ -229,6 +235,38 @@ class DeactivateGripper:
             self.node.get_logger().error('Failed to detach link')
 
 ####################  SERVOING FUNCTION  #############################
+def make_servoing_service_call():
+    # Initialize the ROS node
+    node = rclpy.create_node('service_call_node')
+
+    # Create a client for the service
+    client = node.create_client(Trigger, '/servo_node/start_servo')
+
+    # Wait for the service to be available
+    if not client.wait_for_service(timeout_sec=5.0):
+        node.get_logger().info('Service not available')
+        return
+
+    # Create the request
+    request = Trigger.Request()
+
+    # Call the service
+    future = client.call_async(request)
+
+    # Wait for the service call to complete
+    rclpy.spin_until_future_complete(node, future)
+
+    # Check if the service call was successful
+    if future.result() is not None:
+        node.get_logger().info('Service call succeeded')
+    else:
+        node.get_logger().info('Service call failed')
+
+    # Shutdown the node
+    node.destroy_node()
+
+#######################################################################################
+
 def Servoing(target,marign):
     global anon_cnt
     anon_cnt = anon_cnt + 1
@@ -278,6 +316,54 @@ def Servoing(target,marign):
     node1.destroy_node()
     time.sleep(1)
 
+#########################################################################################
+    
+def yaw_Servoing(target,marign):
+    global anon_cnt
+    anon_cnt = anon_cnt + 1
+    node = Node('Servo'+str(anon_cnt))
+    node1 = FrameListener()
+    callback_group = ReentrantCallbackGroup()
+    twist_pub = node.create_publisher(TwistStamped, "/servo_node/delta_twist_cmds", 10)
+    
+    future = rclpy.Future()
+    def func():
+        if curr_rot == -65536 :
+            return
+        if( abs(target-curr_rot)<marign):
+            twist_msg = TwistStamped()
+            twist_msg.header.frame_id = ur5.base_link_name()
+            twist_msg.header.stamp = node.get_clock().now().to_msg()
+            twist_msg.twist.linear.x = 0.0
+            twist_msg.twist.linear.y = 0.0
+            twist_msg.twist.linear.z = 0.0
+            twist_msg.twist.angular.x = 0.0
+            twist_msg.twist.angular.y = 0.0
+            twist_msg.twist.angular.z = 0.0 
+            twist_pub.publish(twist_msg)
+            future.set_result(True)
+            return
+        twist_msg = TwistStamped()
+        twist_msg.header.frame_id = ur5.base_link_name()
+        twist_msg.header.stamp = node.get_clock().now().to_msg()
+        twist_msg.twist.linear.x = 0.0
+        twist_msg.twist.linear.y = 0.0
+        twist_msg.twist.linear.z = 0.0
+        twist_msg.twist.angular.x = 0.0
+        twist_msg.twist.angular.y = 0.0
+        twist_msg.twist.angular.z = 0.5 if target - curr_rot > 0 else -0.5
+        twist_pub.publish(twist_msg) 
+    # Create timer for moving the end effector
+    node.create_timer(0.02, func)
+    # Spin the node in background thread(s)
+    executor = rclpy.executors.MultiThreadedExecutor(2)
+    executor.add_node(node1)
+    executor.add_node(node)
+    executor.spin_until_future_complete(future)
+    node.destroy_node()
+    node1.destroy_node()
+    time.sleep(1)
+    
 ##############################################################
 class LinkAttacher(Node):
     def __init__(self):
@@ -338,6 +424,10 @@ class Docking_Client(Node):
 ################### MAIN FUNCTION #######################
 def main():
     rclpy.init()
+
+    # Make servoing service call to start servoing
+    make_servoing_service_call()
+
     navigator = BasicNavigator()
 
     # Set initial pose

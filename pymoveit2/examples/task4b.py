@@ -35,6 +35,7 @@ from ur_msgs.srv import SetIO
 from controller_manager_msgs.srv import SwitchController # module call
 from tf_transformations import euler_from_quaternion
 from sensor_msgs.msg import JointState
+from std_srvs.srv import Trigger
 
 # Joint angles list 
 # start = [math.radians(0),math.radians(-137),math.radians(138),math.radians(-180),math.radians(-91),math.radians(180)]
@@ -232,6 +233,35 @@ class StateSubscriber(Node):
         global positions_array
         positions_array = list(msg.position)
 
+def make_servoing_service_call():
+    # Initialize the ROS node
+    node = rclpy.create_node('service_call_node')
+
+    # Create a client for the service
+    client = node.create_client(Trigger, '/servo_node/start_servo')
+
+    # Wait for the service to be available
+    if not client.wait_for_service(timeout_sec=5.0):
+        node.get_logger().info('Service not available')
+        return
+
+    # Create the request
+    request = Trigger.Request()
+
+    # Call the service
+    future = client.call_async(request)
+
+    # Wait for the service call to complete
+    rclpy.spin_until_future_complete(node, future)
+
+    # Check if the service call was successful
+    if future.result() is not None:
+        node.get_logger().info('Service call succeeded')
+    else:
+        node.get_logger().info('Service call failed')
+
+    # Shutdown the node
+    node.destroy_node()
 
 def Servoing(target,marign):
     global anon_cnt
@@ -332,6 +362,10 @@ def yaw_Servoing(target,marign):
 
 def main():
     rclpy.init()
+
+    # Make servoing service call to start servoing
+    make_servoing_service_call()
+
     node_finder = TfFramesFinder()
     moveit_control = MoveItJointControl()
     gripper_controller = GripperController()
