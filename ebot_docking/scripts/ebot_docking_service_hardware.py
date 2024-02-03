@@ -104,7 +104,7 @@ class MyRobotDockingController(Node):
         # The controller loop manages the robot's linear and angular motion 
         # control to achieve docking alignment and execution
         angular_tolerance = 0.06
-        linear_tolerance = 0.5
+        linear_tolerance = 1.0
         if self.is_docking:
             # ...
             # Implement control logic here for linear and angular motion
@@ -153,6 +153,7 @@ class MyRobotDockingController(Node):
                     self.docked_linearly = True
                     self.is_docking = False
                     self.dock_aligned = True
+                    print('done with LINEAR Docking')
                 else :
                     msg.linear.x = self.linear_Kp * (self.linear_goal - curr_dist)
                     print(f'current dist {curr_dist} and linear goal is {self.linear_goal}')
@@ -206,3 +207,4 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+

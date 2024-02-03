@@ -11,11 +11,10 @@ import rclpy
 from rclpy.duration import Duration
 from rclpy.node import Node
 from rclpy.callback_groups import ReentrantCallbackGroup
-from linkattacher_msgs.srv import AttachLink,DetachLink
-from ebot_docking.srv import DockSw 
 from tf_transformations import euler_from_quaternion
 import time
 
+from ebot_docking.srv import DockSw 
 from usb_relay.srv import RelaySw
 import yaml
 from tf_transformations import quaternion_from_euler
@@ -26,8 +25,10 @@ Script to dock the rack and go at the correct pose and place it
 ################### GLOBAL VARIABLES #######################
 # Origin
 origin = [ 0.0 , 0.0 , 0.0 ]
+# Rack pose
+rack_pose = [ 1.05, 1.95, 0.0]
 # AP1 (Arm Pose 1)
-AP1 = [1.0 , -2.355 , 3.14]
+AP1 = [5.0 , 0.0 , 3.14]
 
 ################### CLASS DEFINITION #######################
 
@@ -41,7 +42,7 @@ class USBAttacher(Node):
 
     def send_request(self, arduino_reset : bool , electromagnet : bool):
         if arduino_reset :
-            self.req.relaychannel = 1
+            self.req.relaychannel = False
             self.req.relaystate = True
             self.future1 = self.cli.call_async(self.req)
             rclpy.spin_until_future_complete(self, self.future1)
@@ -52,7 +53,7 @@ class USBAttacher(Node):
             return self.future1.result() and self.future2.result()
         else :
             # Turn the electromagnet ON or OFF
-            self.req.relaychannel = 0
+            self.req.relaychannel = True
             self.req.relaystate = electromagnet
             self.future = self.cli.call_async(self.req)
             rclpy.spin_until_future_complete(self, self.future)
@@ -85,6 +86,10 @@ def main():
     navigator = BasicNavigator()
     usbRelay = USBAttacher()
 
+    # usbRelay.send_request(arduino_reset = False, electromagnet = True)
+
+    dist_from_rack = 13.0
+
     # Set our demo's initial pose
     initial_pose = PoseStamped()
     initial_pose.header.frame_id = 'map'
@@ -100,24 +105,25 @@ def main():
 
     # Wait for navigation to fully activate, since autostarting nav2
     navigator.waitUntilNav2Active()
-    navigator.changeMap('/home/saz/colcon_ws/src/ebot_nav2/maps/map.yaml') # Specifying the map to load
+    navigator.changeMap('/home/eyantra/ws_student_cl/cl_1314/src/ebot_real_nav2/maps/map.yaml') # Specifying the map to load
 
     # READING from config.yaml and determing which rack to pick and its pick position
-    file_path = '/home/saz/colcon_ws/src/pymoveit2/examples/config.yaml'
-    with open(file_path, "r") as file:
-        data = yaml.safe_load(file)
+    # file_path = '/home/saz/colcon_ws/src/pymoveit2/examples/config.yaml'
+    # with open(file_path, "r") as file:
+    #     data = yaml.safe_load(file)
 
     # Accessing the data
-    position_data = data.get("position", [])
-    rack_ids = data.get("package_id", [])
+    # position_data = data.get("position", [])
+    # rack_ids = data.get("package_id", [])
 
-    for rack_id in rack_ids:
-        rack_id = int(rack_id)
-        rack_pose = []
-        for item in position_data:
-            for rack, coordinates in item.items():
-                if int(rack[4:]) == rack_id:
-                    rack_pose = coordinates
+    # for rack_id in rack_ids:
+    #     rack_id = int(rack_id)
+    #     rack_pose = []
+    #     for item in position_data:
+    #         for rack, coordinates in item.items():
+    #             if int(rack[4:]) == rack_id:
+    #                 rack_pose = coordinates
+    while True:
         # Go to Rack Pose
         goal_pose = PoseStamped()
         goal_pose.header.frame_id = 'map'
@@ -151,14 +157,15 @@ def main():
         else:
             print('Goal has an invalid return status!')
         
+        usbRelay.send_request(arduino_reset = False, electromagnet = True)
 
         # Call the Docking service here
         dockClient = Docking_Client()
-        dockClient.send_request(angle = float(rack_pose[2]) , distance = 0.01)
+        dockClient.send_request(angle = float(rack_pose[2]) , distance = dist_from_rack)
 
 
         # Call the Attach Link Service call here
-        usbRelay.send_request(arduino_reset = False, electromagnet = True)
+        # usbRelay.send_request(arduino_reset = False, electromagnet = True)
          
         # Go to AP1 Position
         goal_pose = PoseStamped()
@@ -194,7 +201,7 @@ def main():
             print('Goal has an invalid return status!')
         
         # Call the Docking service here
-        dockClient.send_request(angle = float(AP1[2]), distance = 0.0 , linear=True ,angular=False )
+        dockClient.send_request(angle = float(AP1[2]), distance = dist_from_rack , linear=True ,angular=False )
         
         # Call the Detach Link Service call here
         usbRelay.send_request(arduino_reset = False, electromagnet = False)
@@ -231,6 +238,8 @@ def main():
             print('Goal failed!')
         else:
             print('Goal has an invalid return status!')
+
+        break
         
 
     navigator.lifecycleShutdown()

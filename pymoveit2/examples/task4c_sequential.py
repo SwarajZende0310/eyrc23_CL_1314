@@ -691,7 +691,7 @@ def main():
     global frame_names,target_pose
     print(frame_names)
 
-    marign = 0.01185
+    marign = 0.015
     # Distance from boxes
     dist_for_pick = 0.05 # For Pre Pick Pose
     dist_for_drop = 0.12 # For Pre Drop Pose
