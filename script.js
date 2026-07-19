@@ -1,3 +1,4 @@
+// Progressive interactions for navigation, reveals, and demo playback.
 const menuButton = document.querySelector(".menu-button");
 const navigation = document.getElementById("nav");
 
