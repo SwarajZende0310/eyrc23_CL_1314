@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Cosmo Logistic — an autonomous warehouse robotics system combining ROS 2 navigation, computer vision, docking, and robotic manipulation."
+    />
+    <meta name="theme-color" content="#071817" />
+    <meta property="og:title" content="Cosmo Logistic — Autonomous Warehouse Robotics" />
+    <meta
+      property="og:description"
+      content="A mobile robot and UR5 arm collaborate to find, move, and sort packages with ROS 2."
+    />
+    <meta property="og:type" content="website" />
+    <meta
+      property="og:url"
+      content="https://swarajzende0310.github.io/eyrc23_CL_1314/"
+    />
+    <title>Cosmo Logistic — ROS 2 Warehouse Autonomy</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="script.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to project</a>
+
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="Cosmo Logistic home">
+        <span class="brand-mark">CL</span>
+        <span>
+          COSMO LOGISTIC
+          <small>TEAM 1314 / ROS 2</small>
+        </span>
+      </a>
+      <button class="menu-button" type="button" aria-expanded="false" aria-controls="nav">
+        <i></i><i></i><span class="sr-only">Toggle menu</span>
+      </button>
+      <nav id="nav" aria-label="Main navigation">
+        <a href="#system">System</a>
+        <a href="#missions">Missions</a>
+        <a href="#demos">Demos</a>
+        <a
+          class="repo-link"
+          href="https://github.com/SwarajZende0310/eyrc23_CL_1314"
+          target="_blank"
+          rel="noreferrer"
+        >Source ↗</a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section id="top" class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow reveal">
+            <span class="live-dot"></span>
+            e‑Yantra Robotics Competition · 2023–24
+          </p>
+          <h1 class="reveal">
+            Warehouse<br />
+            autonomy<br />
+            <em>in motion.</em>
+          </h1>
+          <p class="hero-intro reveal">
+            A robotic arm and autonomous mobile robot working as one system to
+            map a warehouse, locate packages, dock with racks, and complete
+            pick-and-place missions.
+          </p>
+          <div class="hero-actions reveal">
+            <a class="button primary" href="#demos">Watch the system <span>↓</span></a>
+            <a class="button" href="#system">Explore the stack <span>→</span></a>
+          </div>
+        </div>
+
+        <div class="hero-visual reveal" aria-label="Animated warehouse robotics schematic">
+          <div class="visual-grid"></div>
+          <div class="planet-orbit orbit-one"></div>
+          <div class="planet-orbit orbit-two"></div>
+          <span class="planet planet-a"></span>
+          <span class="planet planet-b"></span>
+          <div class="warehouse-map">
+            <div class="map-rack rack-a"><i></i><i></i><i></i></div>
+            <div class="map-rack rack-b"><i></i><i></i><i></i></div>
+            <div class="map-rack rack-c"><i></i><i></i></div>
+            <svg class="mission-path" viewBox="0 0 500 340" aria-hidden="true">
+              <path d="M72 274 C135 274 136 185 214 186 S307 92 419 92" />
+            </svg>
+            <div class="ebot">
+              <span class="lidar"></span>
+              <strong>1314</strong>
+              <i class="wheel left"></i><i class="wheel right"></i>
+            </div>
+            <div class="robot-arm">
+              <span class="arm-base"></span>
+              <span class="arm-one"></span>
+              <span class="arm-joint"></span>
+              <span class="arm-two"></span>
+              <span class="gripper"></span>
+            </div>
+          </div>
+          <div class="visual-readout">
+            <span>MAP / ONLINE</span>
+            <span>NAV / ACTIVE</span>
+            <span>ARM / READY</span>
+          </div>
+        </div>
+
+        <div class="hero-stats reveal">
+          <div><strong>02</strong><span>robots coordinated</span></div>
+          <div><strong>03</strong><span>competition stages</span></div>
+          <div><strong>06</strong><span>core subsystems</span></div>
+          <div><strong>01</strong><span>autonomous pipeline</span></div>
+        </div>
+      </section>
+
+      <section class="marquee" aria-label="Technology stack">
+        <div>
+          <span>ROS 2</span><i>✦</i><span>NAV2</span><i>✦</i>
+          <span>MOVEIT 2</span><i>✦</i><span>OPENCV</span><i>✦</i>
+          <span>SLAM</span><i>✦</i><span>TF2</span><i>✦</i>
+          <span>GAZEBO</span><i>✦</i><span>PYTHON</span><i>✦</i>
+          <span aria-hidden="true">ROS 2</span><i aria-hidden="true">✦</i>
+          <span aria-hidden="true">NAV2</span><i aria-hidden="true">✦</i>
+          <span aria-hidden="true">MOVEIT 2</span><i aria-hidden="true">✦</i>
+          <span aria-hidden="true">OPENCV</span><i aria-hidden="true">✦</i>
+        </div>
+      </section>
+
+      <section id="system" class="section system">
+        <div class="section-heading reveal">
+          <div>
+            <p class="section-index">01 / The system</p>
+            <h2>One mission.<br /><em>Six layers.</em></h2>
+          </div>
+          <p>
+            The project joins perception, transforms, motion planning,
+            navigation, feedback control, and orchestration into one warehouse
+            workflow.
+          </p>
+        </div>
+
+        <div class="system-grid">
+          <article class="system-card reveal">
+            <span>01</span><i class="card-icon">◉</i>
+            <h3>Perceive</h3>
+            <p>Detect ArUco-tagged packages with OpenCV and estimate their 3D poses.</p>
+            <small>OpenCV / ArUco</small>
+          </article>
+          <article class="system-card reveal">
+            <span>02</span><i class="card-icon">⌖</i>
+            <h3>Transform</h3>
+            <p>Publish camera, object, base, and end-effector relationships through TF2.</p>
+            <small>TF2 / Pose math</small>
+          </article>
+          <article class="system-card reveal">
+            <span>03</span><i class="card-icon">⌁</i>
+            <h3>Navigate</h3>
+            <p>Map the warehouse with SLAM and move through it using the Nav2 stack.</p>
+            <small>SLAM Toolbox / Nav2</small>
+          </article>
+          <article class="system-card reveal">
+            <span>04</span><i class="card-icon">⊙</i>
+            <h3>Dock</h3>
+            <p>Align the eBot with racks using feedback control before attaching payloads.</p>
+            <small>P controller / Services</small>
+          </article>
+          <article class="system-card reveal">
+            <span>05</span><i class="card-icon">⌇</i>
+            <h3>Manipulate</h3>
+            <p>Plan arm motion, servo toward packages, and operate the magnetic gripper.</p>
+            <small>MoveIt 2 / Servo</small>
+          </article>
+          <article class="system-card reveal">
+            <span>06</span><i class="card-icon">↻</i>
+            <h3>Coordinate</h3>
+            <p>Sequence mobile manipulation into a complete dock, transport, pick, and place task.</p>
+            <small>ROS 2 / Python</small>
+          </article>
+        </div>
+      </section>
+
+      <section id="missions" class="section missions">
+        <div class="section-heading light reveal">
+          <div>
+            <p class="section-index">02 / Mission flow</p>
+            <h2>From map<br />to <em>mission.</em></h2>
+          </div>
+          <p>
+            Each stage added another piece of autonomy until both robots could
+            operate together in the same task.
+          </p>
+        </div>
+
+        <ol class="mission-list">
+          <li class="reveal">
+            <span class="mission-number">01</span>
+            <div><small>WORLD MODEL</small><h3>Map the warehouse</h3></div>
+            <p>Build and save an occupancy map, tune Nav2, and mark keepout zones.</p>
+            <span class="mission-status">SLAM</span>
+          </li>
+          <li class="reveal">
+            <span class="mission-number">02</span>
+            <div><small>MOBILE AUTONOMY</small><h3>Approach &amp; dock</h3></div>
+            <p>Navigate to a rack, close the final alignment loop, and attach it.</p>
+            <span class="mission-status">NAV2 + P</span>
+          </li>
+          <li class="reveal">
+            <span class="mission-number">03</span>
+            <div><small>VISUAL SERVOING</small><h3>Find &amp; pick</h3></div>
+            <p>Estimate package transforms and servo the UR5 into a safe grasp pose.</p>
+            <span class="mission-status">VISION</span>
+          </li>
+          <li class="reveal">
+            <span class="mission-number">04</span>
+            <div><small>SYSTEM INTEGRATION</small><h3>Deliver &amp; place</h3></div>
+            <p>Transport the rack, coordinate the arm, then sort packages autonomously.</p>
+            <span class="mission-status">FULL LOOP</span>
+          </li>
+        </ol>
+      </section>
+
+      <section id="demos" class="section demos">
+        <div class="section-heading reveal">
+          <div>
+            <p class="section-index">03 / Watch it work</p>
+            <h2>Proof, not<br /><em>promises.</em></h2>
+          </div>
+          <p>
+            Three milestones from isolated manipulation to the complete
+            coordinated warehouse task.
+          </p>
+        </div>
+
+        <div class="demo-grid">
+          <article class="demo-card reveal">
+            <button class="video-poster" data-video="V2NQAFl0xxk" type="button" aria-label="Play manipulation with vision demo">
+              <img src="https://i.ytimg.com/vi/V2NQAFl0xxk/maxresdefault.jpg" alt="" loading="lazy" />
+              <span class="play">▶</span><small>02: MANIPULATION</small>
+            </button>
+            <div><span>Task 2A</span><h3>Manipulation with vision</h3><p>Detect, approach, grasp, and place randomly positioned packages.</p></div>
+          </article>
+          <article class="demo-card reveal">
+            <button class="video-poster" data-video="pV-qAvbujhw" type="button" aria-label="Play docking and rack placement demo">
+              <img src="https://i.ytimg.com/vi/pV-qAvbujhw/maxresdefault.jpg" alt="" loading="lazy" />
+              <span class="play">▶</span><small>02: MOBILE ROBOT</small>
+            </button>
+            <div><span>Task 2B</span><h3>Dock &amp; place</h3><p>Navigate, align with feedback, attach the rack, and transport it.</p></div>
+          </article>
+          <article class="demo-card featured reveal">
+            <button class="video-poster" data-video="Z2tGPUlRXYg" type="button" aria-label="Play complete dock, pick, and place demo">
+              <img src="https://i.ytimg.com/vi/Z2tGPUlRXYg/maxresdefault.jpg" alt="" loading="lazy" />
+              <span class="play">▶</span><small>03: FULL SYSTEM</small>
+            </button>
+            <div><span>Task 3B</span><h3>Dock, pick &amp; place</h3><p>The complete pipeline: mobile navigation, docking, perception, and manipulation.</p></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section engineering">
+        <div class="engineering-copy reveal">
+          <p class="section-index">04 / Engineering notes</p>
+          <h2>Built around<br /><em>feedback.</em></h2>
+          <p>
+            Every useful motion closes a loop: camera observations update object
+            poses, TF2 keeps frames connected, controllers reduce docking error,
+            and Nav2 continuously replans around the warehouse.
+          </p>
+          <a href="https://github.com/SwarajZende0310/eyrc23_CL_1314" target="_blank" rel="noreferrer">
+            Read the implementation <span>↗</span>
+          </a>
+        </div>
+        <div class="code-window reveal" aria-label="System pipeline pseudocode">
+          <div><span></span><span></span><span></span><small>MISSION_1314.PY</small></div>
+          <pre><code><b>while</b> mission.active:
+    package = vision.<em>localize</em>()
+    tf_tree.<em>publish</em>(package.pose)
+
+    ebot.<em>navigate</em>(rack.pose)
+    ebot.<em>dock</em>(closed_loop=<i>True</i>)
+
+    arm.<em>plan</em>(package.pose)
+    arm.<em>servo</em>(until=<i>grasped</i>)
+
+    mission.<em>deliver</em>()</code></pre>
+          <footer><span>PERCEPTION</span><span>PLANNING</span><span>CONTROL</span></footer>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div>
+        <span class="footer-mark">CL / 1314</span>
+        <p>Cosmo Logistic<br />e‑Yantra 2023–24</p>
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/SwarajZende0310/eyrc23_CL_1314" target="_blank" rel="noreferrer">GitHub ↗</a>
+        <a href="https://swarajzende0310.github.io/">Swaraj Zende ↗</a>
+      </div>
+      <a class="back-top" href="#top">Back to orbit ↑</a>
+    </footer>
+  </body>
+</html>

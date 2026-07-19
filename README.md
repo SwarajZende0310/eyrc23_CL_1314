@@ -1,5 +1,8 @@
 # Cosmo-Logistic-eYRC-2023-24
 
+[View the project website](https://swarajzende0310.github.io/eyrc23_CL_1314/) ·
+[Watch the full system demo](https://youtu.be/Z2tGPUlRXYg)
+
 ## Team ID :: 1314
 
 ## Theme Introduction
